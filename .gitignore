@@ -1,0 +1,57 @@
+# Data
+data/VSL_Isolated/videos/
+data/VSL_Isolated/frames/
+data/VSL_Isolated/sequences/
+data/qipedc_raw/
+
+# Models
+sign_language_detection/models/
+sign_language_detection/logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+*.ipynb_checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+training.log
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# Old ActionDetectionforSignLanguage folder (if still exists)
+ActionDetectionforSignLanguage/
