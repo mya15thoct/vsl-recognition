@@ -16,7 +16,6 @@ dependencies:
   
   # Computer Vision
   - opencv>=4.5.0
-  - mediapipe>=0.9.0
   
   # Data handling
   - pandas>=1.3.0

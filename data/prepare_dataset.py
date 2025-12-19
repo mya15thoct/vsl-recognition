@@ -1,6 +1,8 @@
 """
 QIPEDC Vietnamese Sign Language Dataset Preparation
 Complete pipeline: Crawl -> Parse -> Download -> Extract Frames -> Create Dictionary
+
+Supports multiple browsers: Chrome, Chromium, Edge, Firefox (auto-detection with fallback)
 """
 
 import os
@@ -12,12 +14,9 @@ import requests
 from pathlib import Path
 from tqdm import tqdm
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 
 
 class QIPEDCDatasetPreparer:
@@ -36,6 +35,86 @@ class QIPEDCDatasetPreparer:
         
         self.driver = None
     
+    def _init_browser(self):
+        """Initialize web browser with fallback support for Chrome, Edge, Firefox, Chromium"""
+        print("\nInitializing web browser...")
+        
+        # Try browsers in order: Chrome -> Chromium -> Edge -> Firefox
+        browsers = [
+            ('Chrome', self._init_chrome),
+            ('Chromium', self._init_chromium),
+            ('Edge', self._init_edge),
+            ('Firefox', self._init_firefox)
+        ]
+        
+        for browser_name, init_func in browsers:
+            try:
+                print(f"  Trying {browser_name}...", end=' ')
+                self.driver = init_func()
+                print(f"[OK] {browser_name} initialized successfully!")
+                return
+            except Exception as e:
+                print(f"[FAILED] {str(e)[:50]}")
+                continue
+        
+        raise RuntimeError("""
+[ERROR] No supported browser found!
+Please install one of:
+  - Chrome:    sudo apt install chromium-browser chromium-chromedriver
+  - Edge:      https://packages.microsoft.com/repos/edge
+  - Firefox:   sudo apt install firefox-geckodriver
+""")
+    
+    def _init_chrome(self):
+        """Initialize Chrome/Chromium"""
+        from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.chrome.options import Options
+        from webdriver_manager.chrome import ChromeDriverManager
+        
+        options = Options()
+        options.add_argument('--headless=new')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        return webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()),
+            options=options
+        )
+    
+    def _init_chromium(self):
+        """Initialize Chromium"""
+        from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.chrome.options import Options
+        
+        options = Options()
+        options.binary_location = '/usr/bin/chromium-browser'
+        options.add_argument('--headless=new')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        return webdriver.Chrome(options=options)
+    
+    def _init_edge(self):
+        """Initialize Microsoft Edge"""
+        from selenium.webdriver.edge.service import Service  
+        from selenium.webdriver.edge.options import Options
+        
+        options = Options()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        return webdriver.Edge(options=options)
+    
+    def _init_firefox(self):
+        """Initialize Firefox"""
+        from selenium.webdriver.firefox.options import Options
+        
+        options = Options()
+        options.headless = True
+        
+        return webdriver.Firefox(options=options)
+    
     # ==================== STEP 1: CRAWL ====================
     
     def crawl_qipedc(self):
@@ -44,17 +123,7 @@ class QIPEDCDatasetPreparer:
         print("STEP 1: CRAWLING DATA FROM QIPEDC")
         print("="*60)
         
-        print("\nInitializing Chrome driver...")
-        chrome_options = Options()
-        chrome_options.add_argument('--headless=new')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        
-        self.driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
-        )
-        print(" Chrome initialized")
+        self._init_browser()
         
         base_url = 'https://qipedc.moet.gov.vn'
         
