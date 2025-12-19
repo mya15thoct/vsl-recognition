@@ -1,84 +1,104 @@
-# Sign Language Action Detection
+# MediaPipe Keypoint Extraction Project
 
-Python modules converted from Jupyter notebooks for sign language action detection using MediaPipe and LSTM.
+Focused on **MediaPipe extraction quality validation** only.
 
-## Project Structure
+## Project Structure (Extraction Only)
 
 ```
 sign_language_detection/
-├── config.py              # Configuration and paths
-├── utils/                 # Utility modules
-│   ├── keypoint_extraction.py
-│   └── visualization.py
-├── data/                  # Data processing
-│   └── collect_data.py
-├── model/                 # Model architecture
-│   └── architecture.py
-├── train.py              # Training script
-├── inference.py          # Inference script
-└── requirements.txt      # Dependencies
+├── config.py                      # Configuration
+├── requirements.txt               # Dependencies
+├── README.md                      # Documentation
+├── scripts/                       # Validation & utility scripts ⭐
+│   ├── __init__.py
+│   └── validate_extraction.py    # MediaPipe quality validation
+├── data/                          # Data processing
+│   ├── __init__.py
+│   └── collect_data.py            # Extract keypoints with MediaPipe
+└── utils/                         # Utility functions
+    ├── __init__.py
+    ├── keypoint_extraction.py     # MediaPipe utilities
+    └── visualization.py           # Visualization functions
 ```
 
-## Setup
+## What Was Removed
 
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Data is automatically configured to use `../data/VSL_Isolated/`
+The following LSTM-related files were removed to focus on extraction:
+- ❌ `model/` - LSTM architecture folder
+- ❌ `models/` - Trained models folder
+- ❌ `logs/` - TensorBoard logs
+- ❌ `train.py` - LSTM training script
+- ❌ `evaluate.py` - LSTM evaluation script
+- ❌ `inference.py` - LSTM inference script
 
 ## Usage
 
-### 1. Collect Keypoints from Videos
+### 1. Validate MediaPipe Extraction Quality
 
 ```bash
 cd sign_language_detection
+python -m scripts.validate_extraction
+```
+
+**This will:**
+- Check 10 random videos from dataset
+- Show keypoints overlay for first video
+- Calculate detection rate, confidence, consistency
+- Provide quality assessment
+
+**Metrics checked:**
+- ✅ Detection Rate (>90% is good)
+- ✅ Confidence Score (>0.7 is good)
+- ✅ Consistency (>0.6 is good)
+
+### 2. Collect Keypoints (After Validation)
+
+```bash
 python -m data.collect_data
 ```
 
-This will process all videos in `../data/VSL_Isolated/` folder and save keypoint sequences.
+**This will:**
+- Process all videos in `../data/VSL_Isolated/`
+- Extract 1662 keypoints per frame using MediaPipe
+- Save sequences to `../data/VSL_Isolated/sequences/`
 
-### 2. Train Model
+## MediaPipe Configuration
 
-```bash
-python train.py
+Edit `config.py`:
+
+```python
+# MediaPipe settings
+MP_MIN_DETECTION_CONFIDENCE = 0.5
+MP_MIN_TRACKING_CONFIDENCE = 0.5
+
+# Data settings
+SEQUENCE_LENGTH = 30      # Frames per sequence
+NO_SEQUENCES = 30         # Sequences per action
 ```
 
-Trains the LSTM model on collected sequences. Model saved to `models/`.
+## Workflow
 
-### 3. Run Inference
-
-**Webcam (real-time):**
-```bash
-python inference.py
+```
+1. Validate extraction quality
+   python -m scripts.validate_extraction
+   
+2. If quality ≥80% good:
+   python -m data.collect_data
+   
+3. Check output:
+   data/VSL_Isolated/sequences/
 ```
 
-**Video file:**
-```bash
-python inference.py --video path/to/video.mp4
-```
+## Next Steps (Future)
 
-Press 'q' to quit.
+After ensuring good extraction quality:
+- Add LSTM model for classification
+- Train on extracted keypoints
+- Evaluate accuracy
+- Deploy for inference
 
-### View Training Progress
+## Notes
 
-```bash
-tensorboard --logdir=logs/training
-```
-
-## Configuration
-
-Edit `config.py` to modify:
-- Data paths
-- Model parameters (LSTM units, epochs, etc.)
-- MediaPipe settings
-- Sequence length
-
-## Files Created
-
-- `models/action_model_best.h5` - Best model (highest validation accuracy)
-- `models/action_model_final.h5` - Final model after all epochs
-- `models/actions.npy` - Action label mappings
-- `data/VSL_Isolated/sequences/` - Extracted keypoint sequences
-- `logs/training/` - TensorBoard training logs
+- Focus: **MediaPipe extraction quality only**
+- No LSTM training in this phase
+- Ensure extraction is >80% good before proceeding

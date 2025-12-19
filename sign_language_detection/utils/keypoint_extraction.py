@@ -4,6 +4,13 @@ Utility functions for keypoint extraction using MediaPipe
 import cv2
 import numpy as np
 import mediapipe as mp
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+
+from config import MP_MIN_DETECTION_CONFIDENCE, MP_MIN_TRACKING_CONFIDENCE
 
 # Initialize MediaPipe
 mp_holistic = mp.solutions.holistic
@@ -59,17 +66,22 @@ def extract_keypoints(results):
     return np.concatenate([pose, face, lh, rh])
 
 
-def get_holistic_model(min_detection_confidence=0.5, min_tracking_confidence=0.5):
+def get_holistic_model(min_detection_confidence=None, min_tracking_confidence=None):
     """
     Create and return MediaPipe Holistic model
     
     Args:
-        min_detection_confidence: Minimum detection confidence
-        min_tracking_confidence: Minimum tracking confidence
+        min_detection_confidence: Minimum detection confidence (default from config)
+        min_tracking_confidence: Minimum tracking confidence (default from config)
         
     Returns:
         MediaPipe Holistic model instance
     """
+    if min_detection_confidence is None:
+        min_detection_confidence = MP_MIN_DETECTION_CONFIDENCE
+    if min_tracking_confidence is None:
+        min_tracking_confidence = MP_MIN_TRACKING_CONFIDENCE
+    
     return mp_holistic.Holistic(
         min_detection_confidence=min_detection_confidence,
         min_tracking_confidence=min_tracking_confidence
