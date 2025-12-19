@@ -36,7 +36,7 @@ The following LSTM-related files were removed to focus on extraction:
 ### 1. Validate MediaPipe Extraction Quality
 
 ```bash
-cd sign_language_detection
+cd preprocessing
 python -m scripts.validate_extraction
 ```
 
@@ -54,7 +54,7 @@ python -m scripts.validate_extraction
 ### 2. Collect Keypoints (After Validation)
 
 ```bash
-python -m data.collect_data
+python -m extraction.collect_data
 ```
 
 **This will:**
@@ -83,7 +83,7 @@ NO_SEQUENCES = 30         # Sequences per action
    python -m scripts.validate_extraction
    
 2. If quality ≥80% good:
-   python -m data.collect_data
+   python -m extraction.collect_data
    
 3. Check output:
    data/VSL_Isolated/sequences/

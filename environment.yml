@@ -1,4 +1,4 @@
-name: sign_language_detection
+name: vsl_preprocessing
 channels:
   - conda-forge
   - defaults

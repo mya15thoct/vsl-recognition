@@ -1,11 +1,10 @@
 """
-Data collection script to extract keypoints from VSL_Isolated videos
+Keypoint extraction from VSL_Isolated videos using MediaPipe
 """
 import cv2
 import numpy as np
 import os
 from pathlib import Path
-from tqdm import tqdm
 
 # Import from parent module
 import sys

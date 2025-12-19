@@ -5,19 +5,20 @@ Sign language action detection for Vietnamese Sign Language (VSL) using MediaPip
 ## Project Structure
 
 ```
-extract_point/
-├── sign_language_detection/     # Main source code
-│   ├── train.py                 # Model training script
-│   ├── inference.py             # Inference script (webcam/video)
-│   ├── config.py                # Configuration and parameters
-│   ├── data/                    # Data processing module
-│   ├── model/                   # LSTM model architecture
-│   └── utils/                   # Utility functions (MediaPipe, visualization)
+vsl-recognition/
+├── preprocessing/               # MediaPipe keypoint extraction
+│   ├── scripts/                 # Validation scripts
+│   │   └── validate_extraction.py
+│   ├── extraction/              # Data extraction module
+│   │   └── collect_data.py      # Extract keypoints from videos
+│   ├── utils/                   # Utility functions (MediaPipe)
+│   │   ├── keypoint_extraction.py
+│   │   └── visualization.py
+│   └── config.py                # Configuration
 │
-└── data/                        # Data and dataset
-    ├── prepare_dataset.py       # Dataset preparation script from QIPEDC
-    ├── VSL_Isolated/            # Dataset videos and frames
-    └── qipedc_raw/              # Raw crawled data
+└── data/                        # Dataset (gitignored)
+    ├── prepare_dataset.py       # Dataset preparation from QIPEDC
+    └── VSL_Isolated/            # Videos, frames, sequences
 ```
 
 ## Installation
@@ -29,7 +30,7 @@ extract_point/
 conda env create -f environment.yml
 
 # Activate environment
-conda activate sign_language_detection
+conda activate vsl_preprocessing
 ```
 
 Or use the setup script:
@@ -41,30 +42,35 @@ chmod +x setup_linux.sh
 ### Option 2: Pip
 
 ```bash
-cd sign_language_detection
+cd preprocessing
 pip install -r requirements.txt
 ```
 
 ## Usage
 
-### 1. Prepare Dataset (Optional)
+### 1. Validate Extraction Quality
 
-If you don't have a dataset yet, crawl from QIPEDC:
+Check MediaPipe extraction quality:
+
+```bash
+cd preprocessing
+python -m scripts.validate_extraction
+```
+
+### 2. Prepare Dataset (Optional)
+
+If you don't have a dataset yet:
 
 ```bash
 cd data
 python prepare_dataset.py
 ```
 
-This will download Vietnamese Sign Language videos from the QIPEDC website.
-
-### 2. Collect Keypoints
-
-Extract keypoints from videos:
+### 3. Extract Keypoints
 
 ```bash
-cd sign_language_detection
-python -m data.collect_data
+cd preprocessing
+python -m extraction.collect_data
 ```
 
 This processes all videos in `../data/VSL_Isolated/` and saves keypoint sequences.
