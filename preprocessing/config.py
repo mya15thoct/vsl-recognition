@@ -8,7 +8,7 @@ import numpy as np
 # Base directories
 BASE_DIR = Path(__file__).parent
 PROJECT_ROOT = BASE_DIR.parent
-DATA_DIR = PROJECT_ROOT / "data" / "VSL_Isolated"
+DATA_DIR = PROJECT_ROOT / "data" / "VSL_Isolated" / "frames"
 
 # Data paths
 SEQUENCE_PATH = DATA_DIR / "sequences"
