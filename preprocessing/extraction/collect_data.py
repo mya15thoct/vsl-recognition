@@ -16,7 +16,7 @@ from utils.keypoint_extraction import mediapipe_detection, extract_keypoints, ge
 
 def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES, sequence_length=SEQUENCE_LENGTH):
     """
-    Collect keypoint sequences from videos in VSL_Isolated folder
+    Collect keypoint sequences from frame images in VSL_Isolated folder
     
     Args:
         actions: List of action folder names to process (None = all folders)
@@ -24,7 +24,7 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES, sequ
         sequence_length: Number of frames per sequence
     """
     print("="*60)
-    print("COLLECTING KEYPOINTS FROM VIDEOS")
+    print("COLLECTING KEYPOINTS FROM FRAMES")
     print("="*60)
     
     # Get all action folders
@@ -53,39 +53,39 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES, sequ
             print(f"[WARNING] Skipping {action}: folder not found")
             continue
         
-        # Get video files in action folder
-        video_files = list(action_path.glob('*.mp4')) + list(action_path.glob('*.avi'))
+        # Get frame image files in action folder
+        frame_files = sorted(list(action_path.glob('*.jpg')) + list(action_path.glob('*.png')))
         
-        if not video_files:
-            print(f"[WARNING] Skipping {action}: no videos found")
+        if not frame_files:
+            print(f"[WARNING] Skipping {action}: no frames found")
             continue
         
-        print(f"[{action_idx+1}/{len(actions)}] Processing '{action}' ({len(video_files)} videos)")
+        print(f"[{action_idx+1}/{len(actions)}] Processing '{action}' ({len(frame_files)} frames)")
         
-        for sequence in range(min(num_sequences, len(video_files))):
-            video_path = video_files[sequence]
-            
-            # Read video
-            cap = cv2.VideoCapture(str(video_path))
+        # Process multiple sequences from the same set of frames
+        for sequence in range(num_sequences):
             frames_data = []
             
-            # Extract frames
-            frame_count = 0
-            while cap.isOpened() and frame_count < sequence_length:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                # Make detections
-                image, results = mediapipe_detection(frame, holistic)
-                
-                # Extract keypoints
-                keypoints = extract_keypoints(results)
-                frames_data.append(keypoints)
-                
-                frame_count += 1
+            # Sample frames evenly
+            if len(frame_files) >= sequence_length:
+                # Sample sequence_length frames evenly from all frames
+                indices = np.linspace(0, len(frame_files)-1, sequence_length, dtype=int)
+            else:
+                # Use all available frames
+                indices = list(range(len(frame_files)))
             
-            cap.release()
+            # Read and process each frame
+            for idx in indices:
+                if idx < len(frame_files):
+                    frame = cv2.imread(str(frame_files[idx]))
+                    
+                    if frame is not None:
+                        # Make detections
+                        image, results = mediapipe_detection(frame, holistic)
+                        
+                        # Extract keypoints
+                        keypoints = extract_keypoints(results)
+                        frames_data.append(keypoints)
             
             # Pad if needed
             while len(frames_data) < sequence_length:
@@ -99,7 +99,7 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES, sequ
             np.save(save_path / f"{sequence}.npy", sequence_data)
             total_processed += 1
         
-        print(f"  [OK] Saved {min(num_sequences, len(video_files))} sequences")
+        print(f"  [OK] Saved {num_sequences} sequences")
     
     holistic.close()
     
