@@ -1,8 +1,11 @@
 # Data
-data/VSL_Isolated/videos/
-data/VSL_Isolated/frames/
-data/VSL_Isolated/sequences/
+# NOTE: VSL_Isolated is now tracked in Git (721MB)
+# data/VSL_Isolated/videos/
+# data/VSL_Isolated/frames/
+# data/VSL_Isolated/sequences/
 data/qipedc_raw/
+*.zip
+*.tar.gz
 
 # Models
 sign_language_detection/models/
