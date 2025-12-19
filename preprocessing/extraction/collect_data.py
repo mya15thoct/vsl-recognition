@@ -53,8 +53,8 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES, sequ
             print(f"[WARNING] Skipping {action}: folder not found")
             continue
         
-        # Get frame image files in action folder
-        frame_files = sorted(list(action_path.glob('*.jpg')) + list(action_path.glob('*.png')))
+        # Get frame image files in action folder (including subdirectories)
+        frame_files = sorted(list(action_path.glob('**/*.jpg')) + list(action_path.glob('**/*.png')))
         
         if not frame_files:
             print(f"[WARNING] Skipping {action}: no frames found")
