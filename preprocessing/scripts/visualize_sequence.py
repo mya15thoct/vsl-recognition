@@ -96,15 +96,15 @@ def visualize_sequence(npy_file_path, output_video_path=None, fps=10, show_live=
     
     # Process each frame
     for frame_idx, keypoints in enumerate(sequence):
-        # Create blank image
-        image = np.zeros((height, width, 3), dtype=np.uint8)
+        # Create white background (255 = white)
+        image = np.ones((height, width, 3), dtype=np.uint8) * 255
         
         # Draw landmarks
         image = draw_landmarks_from_keypoints(image, keypoints)
         
-        # Add frame number
-        cv2.putText(image, f"Frame {frame_idx+1}/{len(sequence)}", 
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        # Add frame number (black text on white background)
+        cv2.putText(image, f'Frame {frame_idx+1}/{len(sequence)}', 
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
         
         # Show live preview
         if show_live:
