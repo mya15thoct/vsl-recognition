@@ -67,7 +67,7 @@ def draw_landmarks_from_keypoints(image, keypoints_array):
     return image
 
 
-def visualize_sequence(npy_file_path, output_video_path=None, fps=10):
+def visualize_sequence(npy_file_path, output_video_path=None, fps=10, show_live=False):
     """
     Create video from .npy sequence file
     
@@ -75,6 +75,7 @@ def visualize_sequence(npy_file_path, output_video_path=None, fps=10):
         npy_file_path: Path to .npy file
         output_video_path: Path to save video (optional)
         fps: Frames per second
+        show_live: Display video in real-time (requires X11)
     """
     # Load sequence
     sequence = np.load(npy_file_path)
@@ -90,6 +91,8 @@ def visualize_sequence(npy_file_path, output_video_path=None, fps=10):
     video_writer = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
     
     print(f"Creating video: {output_video_path}")
+    if show_live:
+        print("Press 'q' to stop live preview...")
     
     # Process each frame
     for frame_idx, keypoints in enumerate(sequence):
@@ -103,21 +106,31 @@ def visualize_sequence(npy_file_path, output_video_path=None, fps=10):
         cv2.putText(image, f"Frame {frame_idx+1}/{len(sequence)}", 
                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
+        # Show live preview
+        if show_live:
+            cv2.imshow('Sequence Visualization - Press Q to stop', image)
+            if cv2.waitKey(100) & 0xFF == ord('q'):  # 100ms delay between frames
+                show_live = False
+        
         # Write frame
         video_writer.write(image)
     
     video_writer.release()
+    if show_live:
+        cv2.destroyAllWindows()
+    
     print(f"✓ Video saved: {output_video_path}")
     return output_video_path
 
 
-def visualize_action(action_name, sequence_idx=0):
+def visualize_action(action_name, sequence_idx=0, show_live=False):
     """
     Visualize a specific sequence from an action
     
     Args:
         action_name: Name of the action folder
         sequence_idx: Index of sequence to visualize
+        show_live: Display video in real-time (requires X11)
     """
     npy_path = SEQUENCE_PATH / action_name / str(sequence_idx) / f"{sequence_idx}.npy"
     
@@ -126,23 +139,29 @@ def visualize_action(action_name, sequence_idx=0):
         return
     
     output_path = SEQUENCE_PATH / action_name / f"sequence_{sequence_idx}_visualization.mp4"
-    visualize_sequence(str(npy_path), str(output_path))
+    visualize_sequence(str(npy_path), str(output_path), show_live=show_live)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python visualize_sequence.py <action_name> [sequence_idx]")
-        print("  python visualize_sequence.py <path_to_npy_file>")
+        print("  python visualize_sequence.py <action_name> [sequence_idx] [--show]")
+        print("  python visualize_sequence.py <path_to_npy_file> [--show]")
+        print("\nOptions:")
+        print("  --show    Display video in real-time (requires X11)")
         print("\nExample:")
         print("  python visualize_sequence.py videos 0")
+        print("  python visualize_sequence.py videos 0 --show")
         sys.exit(1)
+    
+    # Check for --show flag
+    show_live = '--show' in sys.argv
     
     if sys.argv[1].endswith('.npy'):
         # Direct .npy file path
-        visualize_sequence(sys.argv[1])
+        visualize_sequence(sys.argv[1], show_live=show_live)
     else:
         # Action name and sequence index
         action_name = sys.argv[1]
-        sequence_idx = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-        visualize_action(action_name, sequence_idx)
+        sequence_idx = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != '--show' else 0
+        visualize_action(action_name, sequence_idx, show_live=show_live)
