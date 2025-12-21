@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
-from config import DATA_DIR, SEQUENCE_PATH, NO_SEQUENCES, TRIM_START_FRAMES, TRIM_END_FRAMES
+from config import DATA_DIR, SEQUENCE_PATH, NO_SEQUENCES, SEQUENCE_LENGTH, TRIM_START_FRAMES, TRIM_END_FRAMES
 from utils.keypoint_extraction import mediapipe_detection, extract_keypoints, get_holistic_model
 
 
@@ -65,10 +65,8 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES):
         actions = [d.name for d in DATA_DIR.iterdir() if d.is_dir() and d.name != 'sequences']
         print(f"\nFound {len(actions)} action folders in {DATA_DIR}")
     
-    # Auto-detect maximum sequence length
-    print("\n[INFO] Auto-detecting maximum sequence length from dataset...")
-    sequence_length = get_max_sequence_length(DATA_DIR, TRIM_START_FRAMES, TRIM_END_FRAMES)
-    print(f"[INFO] Maximum sequence length (after trimming): {sequence_length} frames")
+    
+    print(f"\n[INFO] Using fixed sequence length: {SEQUENCE_LENGTH} frames")
     print(f"[INFO] Trimming: {TRIM_START_FRAMES} start frames + {TRIM_END_FRAMES} end frames")
     
     # Create sequences directory
@@ -80,7 +78,7 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES):
     
     print(f"\nProcessing {len(actions)} actions...")
     print(f"Sequences per action: {num_sequences}")
-    print(f"Frames per sequence: {sequence_length}\n")
+    print(f"Frames per sequence: {SEQUENCE_LENGTH}\n")
     
     total_processed = 0
     
@@ -114,10 +112,17 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES):
                 # Not enough frames, use all
                 trimmed_frames = frame_files
             
-            # Use ALL available frames (no sampling to preserve motion)
-            indices = list(range(len(trimmed_frames)))
+            # Sample frames to fit SEQUENCE_LENGTH
+            trimmed_count = len(trimmed_frames)
             
-            # Read and process each frame
+            if trimmed_count > SEQUENCE_LENGTH:
+                # Video too long → sample evenly to SEQUENCE_LENGTH
+                indices = np.linspace(0, trimmed_count - 1, SEQUENCE_LENGTH, dtype=int)
+            else:
+                # Video short enough → use all frames (will pad later if needed)
+                indices = list(range(trimmed_count))
+            
+            # Read and process selected frames
             for idx in indices:
                 if idx < len(trimmed_frames):
                     frame = cv2.imread(str(trimmed_frames[idx]))
@@ -131,13 +136,13 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES):
                         frames_data.append(keypoints)
             
             # Pad if needed (repeat last frame for natural padding)
-            if len(frames_data) < sequence_length:
+            if len(frames_data) < SEQUENCE_LENGTH:
                 last_frame = frames_data[-1] if frames_data else np.zeros(1662)
-                while len(frames_data) < sequence_length:
+                while len(frames_data) < SEQUENCE_LENGTH:
                     frames_data.append(last_frame.copy())
             
-            # Save sequence
-            sequence_data = np.array(frames_data[:sequence_length])
+            # Save sequence (exactly SEQUENCE_LENGTH frames)
+            sequence_data = np.array(frames_data[:SEQUENCE_LENGTH])
             save_path = SEQUENCE_PATH / action  # Simplified: action/
             save_path.mkdir(parents=True, exist_ok=True)
             

@@ -25,8 +25,8 @@ MP_MIN_DETECTION_CONFIDENCE = 0.5
 MP_MIN_TRACKING_CONFIDENCE = 0.5
 
 # ==================== DATA SETTINGS ====================
-# SEQUENCE_LENGTH is auto-detected from dataset (max length after trimming)
-# This ensures we capture all available motion frames without loss
+# Fixed sequence length (number of frames per sequence)
+SEQUENCE_LENGTH = 130  # ~4.3 seconds @ 30fps
 
 # Number of sequences to collect per action
 NO_SEQUENCES = 30
