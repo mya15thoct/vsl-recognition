@@ -58,8 +58,8 @@ TOTAL_KEYPOINTS = POSE_LANDMARKS + FACE_LANDMARKS + (HAND_LANDMARKS * 2)  # 1662
 
 # ==================== COLORS FOR VISUALIZATION ====================
 COLORS = {
-    'face': ((80, 110, 10), (80, 256, 121)),
-    'pose': ((80, 22, 10), (80, 44, 121)),
-    'left_hand': ((121, 22, 76), (121, 44, 250)),
-    'right_hand': ((245, 117, 66), (245, 66, 230))
+    'face': ((0, 255, 0), (0, 200, 0)),           # Bright green (face)
+    'pose': ((0, 0, 255), (0, 0, 200)),           # Bright red (pose/body)
+    'left_hand': ((255, 0, 0), (200, 0, 0)),      # Bright blue (left hand)
+    'right_hand': ((255, 0, 255), (200, 0, 200))  # Bright magenta (right hand)
 }
