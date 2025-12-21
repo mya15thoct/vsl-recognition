@@ -11,7 +11,7 @@ PROJECT_ROOT = BASE_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data" / "VSL_Isolated" / "frames"
 
 # Data paths
-SEQUENCE_PATH = DATA_DIR / "sequences"
+SEQUENCE_PATH = PROJECT_ROOT / "data" / "VSL_Isolated" / "sequences"  # Fixed: outside frames/
 MODEL_PATH = BASE_DIR / "models"
 LOGS_PATH = BASE_DIR / "logs"
 

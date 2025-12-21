@@ -138,9 +138,10 @@ def collect_keypoints_from_videos(actions=None, num_sequences=NO_SEQUENCES):
             
             # Save sequence
             sequence_data = np.array(frames_data[:sequence_length])
-            save_path = SEQUENCE_PATH / action / str(sequence)
+            save_path = SEQUENCE_PATH / action  # Simplified: action/
             save_path.mkdir(parents=True, exist_ok=True)
             
+            # Save directly as sequence_num.npy (not in subfolder)
             np.save(save_path / f"{sequence}.npy", sequence_data)
             total_processed += 1
         

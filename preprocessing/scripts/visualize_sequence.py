@@ -132,7 +132,8 @@ def visualize_action(action_name, sequence_idx=0, show_live=False):
         sequence_idx: Index of sequence to visualize
         show_live: Display video in real-time (requires X11)
     """
-    npy_path = SEQUENCE_PATH / action_name / str(sequence_idx) / f"{sequence_idx}.npy"
+    # Updated path: action/sequence.npy (not action/sequence/sequence.npy)
+    npy_path = SEQUENCE_PATH / action_name / f"{sequence_idx}.npy"
     
     if not npy_path.exists():
         print(f"[ERROR] File not found: {npy_path}")
