@@ -25,11 +25,15 @@ MP_MIN_DETECTION_CONFIDENCE = 0.5
 MP_MIN_TRACKING_CONFIDENCE = 0.5
 
 # ==================== DATA SETTINGS ====================
-# Number of frames to capture per video sequence
-SEQUENCE_LENGTH = 30
+# SEQUENCE_LENGTH is auto-detected from dataset (max length after trimming)
+# This ensures we capture all available motion frames without loss
 
 # Number of sequences to collect per action
 NO_SEQUENCES = 30
+
+# Trim frames at start/end (preparation and ending movements)
+TRIM_START_FRAMES = 5  # Skip first 5 frames
+TRIM_END_FRAMES = 5    # Skip last 5 frames
 
 # Actions to detect (will be populated from data folder)
 ACTIONS = np.array([])  # Will be set dynamically from VSL_Isolated folders
