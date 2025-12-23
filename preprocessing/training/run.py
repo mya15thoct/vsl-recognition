@@ -4,11 +4,57 @@ Run full training and evaluation pipeline
 import sys
 from pathlib import Path
 import tensorflow as tf
+import numpy as np
+import random
+import os
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+# ========================================
+# FORCE CPU-ONLY MODE (avoid GPU issues)
+# ========================================
+print("="*70)
+print("FORCING CPU-ONLY MODE")
+print("="*70)
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable GPU
+tf.config.set_visible_devices([], 'GPU')
+print("✓ GPU disabled - running on CPU only")
+print("="*70)
+print()
+
 from training.train import train_model
 from training.evaluate import evaluate_model
+
+
+def set_seed(seed=42):
+    """
+    Set random seeds for reproducible results
+    
+    Args:
+        seed: Random seed value (default: 42)
+    """
+    print("="*70)
+    print("SETTING RANDOM SEEDS FOR REPRODUCIBILITY")
+    print("="*70)
+    print(f"Random seed: {seed}")
+    
+    # Python random
+    random.seed(seed)
+    
+    # Numpy
+    np.random.seed(seed)
+    
+    # TensorFlow
+    tf.random.set_seed(seed)
+    
+    # For hash-based operations
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    # TensorFlow deterministic operations (slower but reproducible)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    
+    print("All random seeds set")
+    print("="*70 + "\n")
 
 
 def setup_gpu():
