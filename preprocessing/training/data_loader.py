@@ -11,9 +11,13 @@ sys.path.append(str(Path(__file__).parent.parent))
 from config import SEQUENCE_PATH
 
 
-def load_sequences(sequence_path=SEQUENCE_PATH):
+def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None):
     """
     Load all sequences and labels
+    
+    Args:
+        sequence_path: Path to sequences directory
+        max_sequences_per_action: Limit sequences per action (None = all). Use for testing with limited RAM.
     
     Returns:
         X: np.array (num_samples, 130, 1662)
@@ -21,6 +25,8 @@ def load_sequences(sequence_path=SEQUENCE_PATH):
         action_names: list - Action names
     """
     print("Loading sequences...")
+    if max_sequences_per_action:
+        print(f"  [LIMIT MODE] Max {max_sequences_per_action} sequences per action")
     
     # Get all action folders
     action_folders = sorted([d for d in sequence_path.iterdir() if d.is_dir()])
@@ -31,6 +37,10 @@ def load_sequences(sequence_path=SEQUENCE_PATH):
     
     for label_idx, action_folder in enumerate(action_folders):
         npy_files = sorted(action_folder.glob('*.npy'))
+        
+        # Limit sequences if specified
+        if max_sequences_per_action:
+            npy_files = npy_files[:max_sequences_per_action]
         
         for npy_file in npy_files:
             seq = np.load(npy_file)

@@ -22,10 +22,9 @@ def train_model():
     print("SIGN LANGUAGE RECOGNITION - TRAINING")
     print("="*70)
     
-    # 1. Load data (LIMITED MODE to avoid OOM)
+    # 1. Load data
     print("\n[1/5] Loading data...")
-    print("⚠️  MEMORY SAVING MODE: Loading only 10 sequences per action")
-    X, y, action_names = load_sequences(max_sequences_per_action=10)
+    X, y, action_names = load_sequences()  # Load ALL sequences
     num_classes = len(action_names)
     
     # 2. Split data
