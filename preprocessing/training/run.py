@@ -6,25 +6,21 @@ from pathlib import Path
 import os
 
 # ========================================
-# FIX CPU CRASHES - SET BEFORE TF IMPORT
+# ENVIRONMENT CONFIGURATION
 # ========================================
 print("="*70)
-print("CONFIGURING CPU ENVIRONMENT")
+print("CONFIGURING ENVIRONMENT")
 print("="*70)
 
-# Disable oneDNN optimizations (prevent crashes)
+# Disable oneDNN optimizations (prevent crashes/instability)
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 print("✓ Disabled oneDNN optimizations")
 
-# Limit threading to prevent crashes
-os.environ['OMP_NUM_THREADS'] = '4'
-os.environ['MKL_NUM_THREADS'] = '4'
-os.environ['OPENBLAS_NUM_THREADS'] = '4'
-print("✓ Limited CPU threads to 4")
+# Set reasonable thread limits
+os.environ['OMP_NUM_THREADS'] = '8'
+os.environ['MKL_NUM_THREADS'] = '8'
+print("✓ Set thread limits")
 
-# Force CPU-only mode
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-print("✓ GPU disabled")
 print("="*70)
 print()
 
@@ -34,11 +30,29 @@ import random
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-# Configure TensorFlow threading
-tf.config.set_visible_devices([], 'GPU')
-tf.config.threading.set_inter_op_parallelism_threads(4)
-tf.config.threading.set_intra_op_parallelism_threads(4)
-print("✓ TensorFlow CPU threading configured")
+# ========================================
+# GPU CONFIGURATION
+# ========================================
+print("="*70)
+print("GPU CONFIGURATION")
+print("="*70)
+
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Enable memory growth (prevent OOM)
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        print(f"✓ Found {len(gpus)} GPU(s)")
+        for i, gpu in enumerate(gpus):
+            print(f"  GPU {i}: {gpu.name}")
+        print("✓ GPU memory growth enabled")
+    except RuntimeError as e:
+        print(f"⚠ GPU configuration error: {e}")
+else:
+    print("⚠ No GPU detected - training will use CPU (slower)")
+
+print("="*70)
 print()
 
 from training.train import train_model
