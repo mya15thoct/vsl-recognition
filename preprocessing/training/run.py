@@ -3,23 +3,42 @@ Run full training and evaluation pipeline
 """
 import sys
 from pathlib import Path
+import os
+
+# ========================================
+# FIX CPU CRASHES - SET BEFORE TF IMPORT
+# ========================================
+print("="*70)
+print("CONFIGURING CPU ENVIRONMENT")
+print("="*70)
+
+# Disable oneDNN optimizations (prevent crashes)
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+print("✓ Disabled oneDNN optimizations")
+
+# Limit threading to prevent crashes
+os.environ['OMP_NUM_THREADS'] = '4'
+os.environ['MKL_NUM_THREADS'] = '4'
+os.environ['OPENBLAS_NUM_THREADS'] = '4'
+print("✓ Limited CPU threads to 4")
+
+# Force CPU-only mode
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+print("✓ GPU disabled")
+print("="*70)
+print()
+
 import tensorflow as tf
 import numpy as np
 import random
-import os
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-# ========================================
-# FORCE CPU-ONLY MODE (avoid GPU issues)
-# ========================================
-print("="*70)
-print("FORCING CPU-ONLY MODE")
-print("="*70)
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable GPU
+# Configure TensorFlow threading
 tf.config.set_visible_devices([], 'GPU')
-print("✓ GPU disabled - running on CPU only")
-print("="*70)
+tf.config.threading.set_inter_op_parallelism_threads(4)
+tf.config.threading.set_intra_op_parallelism_threads(4)
+print("✓ TensorFlow CPU threading configured")
 print()
 
 from training.train import train_model
