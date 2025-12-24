@@ -37,21 +37,33 @@ def train_model():
     
     # 3. Create datasets
     print("\n[3/5] Creating TensorFlow datasets...")
+    print("  → Creating training dataset...")
     train_ds = create_tf_dataset(X_train, y_train, batch_size=TRAINING_CONFIG['batch_size'], shuffle=True)
+    print("  ✓ Training dataset created")
+    print("  → Creating validation dataset...")
     val_ds = create_tf_dataset(X_val, y_val, batch_size=TRAINING_CONFIG['batch_size'], shuffle=False)
+    print("  ✓ Validation dataset created")
+    print("  → Creating test dataset...")
     test_ds = create_tf_dataset(X_test, y_test, batch_size=TRAINING_CONFIG['batch_size'], shuffle=False)
+    print("  ✓ Test dataset created")
     
     # 4. Build model
     print("\n[4/5] Building model...")
+    print("  → Creating model architecture...")
     model = create_sign_language_model(num_classes=num_classes)
+    print("  ✓ Model architecture created")
     
+    print("  → Compiling model...")
     model.compile(
         optimizer=Adam(learning_rate=TRAINING_CONFIG['learning_rate']),
         loss='categorical_crossentropy',
         metrics=['accuracy']
     )
+    print("  ✓ Model compiled")
     
+    print("  → Model summary:")
     model.summary()
+    print("  ✓ Model ready")
     
     # 5. Setup callbacks
     print("\n[5/5] Setting up training...")
@@ -86,7 +98,18 @@ def train_model():
     # 6. Train
     print("\n" + "="*70)
     print("STARTING TRAINING")
+    print("="*70)
+    print(f"Training samples: {len(X_train)}")
+    print(f"Validation samples: {len(X_val)}")
+    print(f"Batch size: {TRAINING_CONFIG['batch_size']}")
+    print(f"Epochs: {TRAINING_CONFIG['epochs']}")
     print("="*70 + "\n")
+    
+    import sys
+    sys.stdout.flush()  # Force flush before model.fit
+    
+    print("[DEBUG] About to call model.fit()...")
+    sys.stdout.flush()
     
     history = model.fit(
         train_ds,
@@ -95,6 +118,9 @@ def train_model():
         callbacks=callbacks,
         verbose=1
     )
+    
+    print("[DEBUG] model.fit() completed successfully!")
+    sys.stdout.flush()
     
     # 7. Evaluate on test set
     print("\n" + "="*70)
