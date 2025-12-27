@@ -70,29 +70,51 @@ python prepare_dataset.py
 
 ```bash
 cd preprocessing
-python -m extraction.collect_data
+python -m scripts.extract_keypoints
 ```
 
 This processes all videos in `../data/VSL_Isolated/` and saves keypoint sequences.
 
-### 3. Train Model
+### 4. Train Model
 
 ```bash
-python train.py
+cd preprocessing/training
+python run.py
 ```
 
-Models will be saved to the `models/` folder.
+This will:
+- Train the CNN+LSTM model
+- Save best model to `checkpoints/best_model.h5`
+- Generate training logs for TensorBoard
 
-### 4. Run Inference
+### 5. Evaluate Model
+
+```bash
+cd preprocessing/training
+python evaluate.py
+```
+
+This will:
+- Test the model on test set
+- Generate classification report
+- Save confusion matrix to `checkpoints/confusion_matrix.png`
+
+### 6. Run Inference (Real-time Predictions)
 
 **Using webcam:**
 ```bash
-python inference.py
+cd preprocessing
+python -m scripts.inference --mode webcam
 ```
 
 **Using video file:**
 ```bash
-python inference.py --video path/to/video.mp4
+python -m scripts.inference --mode video --video path/to/video.mp4
+```
+
+**Save output video:**
+```bash
+python -m scripts.inference --mode video --video input.mp4 --output result.mp4
 ```
 
 Press `q` to quit.

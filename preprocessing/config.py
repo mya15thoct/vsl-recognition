@@ -77,7 +77,7 @@ MODEL_CONFIG = {
 
 # Training hyperparameters
 TRAINING_CONFIG = {
-    'batch_size': 8,  # Reduced from 32 to avoid OOM
+    'batch_size': 32,
     'epochs': 100,
     'learning_rate': 0.001,
     'early_stopping_patience': 15,
