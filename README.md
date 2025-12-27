@@ -1,12 +1,18 @@
-# Vietnamese Sign Language Detection
+# Sign Language Recognition
 
-Sign language action detection for Vietnamese Sign Language (VSL) using MediaPipe and LSTM.
+Sign language action detection using MediaPipe and CNN+LSTM model.
+
+**Current Dataset**: INCLUDE (Indian Sign Language)
+- 76 classes
+- 1,166 videos
+- Isolated sign recognition
 
 ## Project Structure
 
 ```
-vsl-recognition/
-├── preprocessing/               # MediaPipe keypoint extraction
+sign-language/
+├── data/                       # Dataset
+│   └── INCLUDE/                # INCLUDE dataset videos
 │   ├── scripts/                 # Validation scripts
 │   │   └── validate_extraction.py
 │   ├── extraction/              # Data extraction module
@@ -70,10 +76,10 @@ python prepare_dataset.py
 
 ```bash
 cd preprocessing
-python -m scripts.extract_keypoints
+python scripts/extract_include.py
 ```
 
-This processes all videos in `../data/VSL_Isolated/` and saves keypoint sequences.
+This processes all videos in `data/INCLUDE/` and saves keypoint sequences to `data/INCLUDE/sequences/`.
 
 ### 4. Train Model
 
@@ -83,7 +89,7 @@ python run.py
 ```
 
 This will:
-- Train the CNN+LSTM model
+- Train the CNN+LSTM model on INCLUDE dataset
 - Save best model to `checkpoints/best_model.h5`
 - Generate training logs for TensorBoard
 
@@ -114,7 +120,7 @@ python -m scripts.inference --mode video --video path/to/video.mp4
 
 **Save output video:**
 ```bash
-python -m scripts.inference --mode video --video input.mp4 --output result.mp4
+python -m scripts.inference --mode video --video input.mp4 --output result.mp4 --headless
 ```
 
 Press `q` to quit.

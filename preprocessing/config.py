@@ -8,10 +8,10 @@ import numpy as np
 # Base directories
 BASE_DIR = Path(__file__).parent
 PROJECT_ROOT = BASE_DIR.parent
-DATA_DIR = PROJECT_ROOT / "data" / "VSL_Isolated" / "frames"
+DATA_DIR = PROJECT_ROOT / "data" / "INCLUDE"  # Changed to INCLUDE
 
 # Data paths
-SEQUENCE_PATH = PROJECT_ROOT / "data" / "VSL_Isolated" / "sequences"  # Fixed: outside frames/
+SEQUENCE_PATH = PROJECT_ROOT / "data" / "INCLUDE" / "sequences"  # INCLUDE sequences
 MODEL_PATH = BASE_DIR / "models"
 LOGS_PATH = BASE_DIR / "logs"
 
@@ -26,17 +26,16 @@ MP_MIN_TRACKING_CONFIDENCE = 0.5
 
 # ==================== DATA SETTINGS ====================
 # Fixed sequence length (number of frames per sequence)
-SEQUENCE_LENGTH = 130  # ~4.3 seconds @ 30fps
+SEQUENCE_LENGTH = 32  # INCLUDE uses 32 frames per video
 
-# Number of sequences to collect per action
-NO_SEQUENCES = 30
-
+# Number of sequences from each video
+NO_SEQUENCES = 1  # INCLUDE: 1 sequence per video (no augmentation needed)
 # Trim frames at start/end (preparation and ending movements)
-TRIM_START_FRAMES = 5  # Skip first 5 frames
-TRIM_END_FRAMES = 5    # Skip last 5 frames
+TRIM_START_FRAMES = 0  # INCLUDE videos are pre-trimmed
+TRIM_END_FRAMES = 0
 
 # Actions to detect (will be populated from data folder)
-ACTIONS = np.array([])  # Will be set dynamically from VSL_Isolated folders
+ACTIONS = np.array([])  # Will be set dynamically from class folders
 
 # ==================== MODEL SETTINGS ====================
 # Model architecture
