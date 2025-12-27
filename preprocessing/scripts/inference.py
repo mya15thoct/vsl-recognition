@@ -134,24 +134,24 @@ def inference_webcam(model, action_mapping, threshold=0.7):
                 predictions.append(predicted_class)
                 predictions = predictions[-10:]  # Keep last 10 predictions
             
-            # Display UI
+            # Display UI at BOTTOM (avoid covering original video text)
             h, w, _ = image.shape
             
-            # Background for text
-            cv2.rectangle(image, (0, 0), (w, 120), (0, 0, 0), -1)
+            # Background for text at bottom
+            cv2.rectangle(image, (0, h-120), (w, h), (0, 0, 0), -1)
             
             # Current prediction
             color = (0, 255, 0) if confidence > threshold else (0, 165, 255)
             cv2.putText(image, f"Prediction: {current_action}", 
-                       (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 2)
+                       (10, h-80), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 2)
             
             # Confidence
             cv2.putText(image, f"Confidence: {confidence*100:.1f}%", 
-                       (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                       (10, h-40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
             
-            # Sequence progress
+            # Sequence progress bar
             progress = len(sequence) / SEQUENCE_LENGTH
-            cv2.rectangle(image, (10, 100), (10 + int(progress * (w-20)), 115), 
+            cv2.rectangle(image, (10, h-20), (10 + int(progress * (w-20)), h-10), 
                          (0, 255, 0), -1)
             
             # Show frame
@@ -239,12 +239,12 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
                 else:
                     current_action = "Uncertain..."
             
-            # Display UI
+            # Display UI at BOTTOM
             h, w, _ = image.shape
-            cv2.rectangle(image, (0, 0), (w, 80), (0, 0, 0), -1)
+            cv2.rectangle(image, (0, h-80), (w, h), (0, 0, 0), -1)
             color = (0, 255, 0) if confidence > threshold else (0, 165, 255)
             cv2.putText(image, f"{current_action} ({confidence*100:.1f}%)", 
-                       (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 2)
+                       (10, h-30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 2)
             
             # Show frame (only if not headless)
             if not headless:
