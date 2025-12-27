@@ -165,7 +165,7 @@ def inference_webcam(model, action_mapping, threshold=0.7):
     print("\nInference stopped.")
 
 
-def inference_video(model, action_mapping, video_path, threshold=0.7, output_path=None):
+def inference_video(model, action_mapping, video_path, threshold=0.7, output_path=None, headless=False):
     """
     Inference from video file
     
@@ -175,6 +175,7 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
         video_path: Path to input video
         threshold: Confidence threshold
         output_path: Path to save output video (optional)
+        headless: If True, don't show GUI (for servers without display)
     """
     cap = cv2.VideoCapture(video_path)
     
@@ -245,13 +246,14 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
             cv2.putText(image, f"{current_action} ({confidence*100:.1f}%)", 
                        (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 2)
             
-            # Show frame
-            cv2.imshow('Processing - Press Q to stop', image)
+            # Show frame (only if not headless)
+            if not headless:
+                cv2.imshow('Processing - Press Q to stop', image)
             
             if output_path:
                 out.write(image)
             
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if not headless and cv2.waitKey(1) & 0xFF == ord('q'):
                 break
     
     cap.release()
@@ -273,6 +275,8 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, help='Path to model file (default: checkpoints/best_model.h5)')
     parser.add_argument('--threshold', type=float, default=0.7, 
                        help='Confidence threshold (default: 0.7)')
+    parser.add_argument('--headless', action='store_true',
+                       help='Run without GUI (for servers without display)')
     
     args = parser.parse_args()
     
@@ -289,4 +293,4 @@ if __name__ == "__main__":
             print("Error: --video path required for video mode")
             sys.exit(1)
         inference_video(model, action_mapping, args.video, 
-                       threshold=args.threshold, output_path=args.output)
+                       threshold=args.threshold, output_path=args.output, headless=args.headless)
