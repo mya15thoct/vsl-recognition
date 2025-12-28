@@ -50,7 +50,18 @@ def train_model():
     # 4. Build model
     print("\n[4/5] Building model...")
     print("  → Creating model architecture...")
-    model = create_sign_language_model(num_classes=num_classes)
+    
+    # Get sequence length from data shape
+    sequence_length = X_train.shape[1]  # Should be 32 for INCLUDE
+    keypoint_dim = X_train.shape[2]      # Should be 1662
+    
+    print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
+    
+    model = create_sign_language_model(
+        num_classes=num_classes, 
+        sequence_length=sequence_length,
+        keypoint_dim=keypoint_dim
+    )
     print("  ✓ Model architecture created")
     
     print("  → Compiling model...")
