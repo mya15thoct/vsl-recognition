@@ -78,18 +78,29 @@ def split_data(X, y, train_size=0.7, val_size=0.15, random_state=42):
     print(f"  Average samples per class: {class_counts.mean():.1f}")
     
     # Check if stratification is possible
-    # Need at least 2 samples per class for stratified split
-    min_required_for_stratify = 2
-    can_stratify = min_samples >= min_required_for_stratify
+    # IMPORTANT: We need to check if classes will have enough samples AFTER first split
+    # If a class has 3 samples and we do 70/30 split, it might become 2/1
+    # Then the second split on the "1" will fail with stratify
+    
+    # Calculate minimum samples in temp set after first split
+    temp_size = 1 - train_size  # 0.3 for default
+    min_samples_in_temp = int(np.floor(min_samples * temp_size))
+    
+    # Need at least 2 samples in temp set to do stratified val/test split
+    can_stratify = min_samples_in_temp >= 2
     
     if not can_stratify:
-        # Find problematic classes
-        problematic = [(unique_classes[i], class_counts[i]) 
-                      for i in range(len(unique_classes)) 
-                      if class_counts[i] < min_required_for_stratify]
-        print(f"\n⚠️  WARNING: {len(problematic)} class(es) have < {min_required_for_stratify} samples:")
-        for cls_idx, count in problematic[:5]:  # Show first 5
-            print(f"     Class {cls_idx}: {count} sample(s)")
+        # Find problematic classes (those that will have < 2 in temp)
+        problematic = []
+        for i in range(len(unique_classes)):
+            samples_in_temp = int(np.floor(class_counts[i] * temp_size))
+            if samples_in_temp < 2:
+                problematic.append((unique_classes[i], class_counts[i], samples_in_temp))
+        
+        print(f"\n⚠️  WARNING: {len(problematic)} class(es) will have < 2 samples in val+test set:")
+        print(f"     (After {train_size*100:.0f}/{temp_size*100:.0f} split)")
+        for cls_idx, total_count, temp_count in problematic[:5]:  # Show first 5
+            print(f"     Class {cls_idx}: {total_count} total → ~{temp_count} in val+test")
         if len(problematic) > 5:
             print(f"     ... and {len(problematic) - 5} more")
     
