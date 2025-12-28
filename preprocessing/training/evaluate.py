@@ -38,19 +38,36 @@ def evaluate_model(model_path=None):
     y_pred = model.predict(X_test, verbose=1)
     y_pred_classes = np.argmax(y_pred, axis=1)
     
+    # Get unique classes in test set (some may be missing due to random split)
+    unique_classes_in_test = np.unique(y_test)
+    present_action_names = [action_names[i] for i in unique_classes_in_test]
+    
+    # Check if all classes are present
+    if len(unique_classes_in_test) < len(action_names):
+        missing_classes = set(range(len(action_names))) - set(unique_classes_in_test)
+        print(f"\n⚠️  WARNING: {len(missing_classes)} class(es) not in test set (due to random split):")
+        for cls_idx in sorted(list(missing_classes))[:5]:
+            print(f"     Class {cls_idx}: {action_names[cls_idx]}")
+        if len(missing_classes) > 5:
+            print(f"     ... and {len(missing_classes) - 5} more")
+    
     # Metrics
     print("\n" + "="*70)
     print("CLASSIFICATION REPORT")
     print("="*70)
-    print(classification_report(y_test, y_pred_classes, target_names=action_names))
+    # Use labels parameter to specify which classes to include
+    print(classification_report(y_test, y_pred_classes, 
+                                labels=unique_classes_in_test,
+                                target_names=present_action_names,
+                                zero_division=0))
     
-    # Confusion matrix
-    cm = confusion_matrix(y_test, y_pred_classes)
+    # Confusion matrix (only for classes in test set)
+    cm = confusion_matrix(y_test, y_pred_classes, labels=unique_classes_in_test)
     
     plt.figure(figsize=(20, 20))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=action_names, yticklabels=action_names)
-    plt.title('Confusion Matrix')
+                xticklabels=present_action_names, yticklabels=present_action_names)
+    plt.title(f'Confusion Matrix ({len(present_action_names)} classes in test set)')
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
