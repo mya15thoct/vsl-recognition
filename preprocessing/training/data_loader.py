@@ -62,21 +62,64 @@ def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None):
 
 def split_data(X, y, train_size=0.7, val_size=0.15, random_state=42):
     """
-    Split into train/val/test
+    Split into train/val/test with smart stratification
     
     Returns:
         X_train, X_val, X_test, y_train, y_val, y_test
     """
-    # Split train vs (val+test)
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, train_size=train_size, random_state=random_state, stratify=y
-    )
+    # Check class distribution
+    unique_classes, class_counts = np.unique(y, return_counts=True)
+    min_samples = class_counts.min()
     
-    # Split val vs test
-    val_ratio = val_size / (1 - train_size)
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, train_size=val_ratio, random_state=random_state, stratify=y_temp
-    )
+    print(f"\nClass distribution:")
+    print(f"  Total classes: {len(unique_classes)}")
+    print(f"  Minimum samples per class: {min_samples}")
+    print(f"  Maximum samples per class: {class_counts.max()}")
+    print(f"  Average samples per class: {class_counts.mean():.1f}")
+    
+    # Check if stratification is possible
+    # Need at least 2 samples per class for stratified split
+    min_required_for_stratify = 2
+    can_stratify = min_samples >= min_required_for_stratify
+    
+    if not can_stratify:
+        # Find problematic classes
+        problematic = [(unique_classes[i], class_counts[i]) 
+                      for i in range(len(unique_classes)) 
+                      if class_counts[i] < min_required_for_stratify]
+        print(f"\n⚠️  WARNING: {len(problematic)} class(es) have < {min_required_for_stratify} samples:")
+        for cls_idx, count in problematic[:5]:  # Show first 5
+            print(f"     Class {cls_idx}: {count} sample(s)")
+        if len(problematic) > 5:
+            print(f"     ... and {len(problematic) - 5} more")
+    
+    # Decide split strategy
+    if can_stratify:
+        print(f"  ✓ Using STRATIFIED split (balanced distribution)")
+        # Split train vs (val+test) - stratified
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            X, y, train_size=train_size, random_state=random_state, stratify=y
+        )
+        
+        # Split val vs test - stratified
+        val_ratio = val_size / (1 - train_size)
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, train_size=val_ratio, random_state=random_state, stratify=y_temp
+        )
+    else:
+        print(f"  ⚠️  Using RANDOM split (stratification not possible)")
+        print(f"     → May cause class imbalance in train/val/test sets")
+        
+        # Split train vs (val+test) - non-stratified
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            X, y, train_size=train_size, random_state=random_state
+        )
+        
+        # Split val vs test - non-stratified
+        val_ratio = val_size / (1 - train_size)
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, train_size=val_ratio, random_state=random_state
+        )
     
     print(f"\nDataset split:")
     print(f"  Train: {len(X_train)} ({len(X_train)/len(X)*100:.1f}%)")
