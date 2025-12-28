@@ -130,7 +130,10 @@ def run_full_pipeline():
     """
     Run complete pipeline: train and evaluate
     """
-    # Step 0: Setup GPU
+    # Step 0: Set seed for reproducibility
+    set_seed()
+    
+    # Step 0.5: Setup GPU
     setup_gpu()
     
     print("="*70)
@@ -147,15 +150,28 @@ def run_full_pipeline():
     print("\n" + "="*70)
     print("STEP 2: DETAILED EVALUATION")
     print("="*70)
-    eval_acc, confusion_matrix = evaluate_model()
+    
+    try:
+        eval_acc, confusion_matrix = evaluate_model()
+        print("Evaluation completed successfully")
+    except Exception as e:
+        print(f" Evaluation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        eval_acc = 0.0
+        confusion_matrix = None
     
     # Summary
     print("\n" + "="*70)
     print("PIPELINE COMPLETED")
     print("="*70)
     print(f"Training completed successfully")
-    print(f"Final test accuracy: {eval_acc*100:.2f}%")
-    print(f"Confusion matrix saved to checkpoints/confusion_matrix.png")
+    if eval_acc > 0:
+        print(f"Final test accuracy: {eval_acc*100:.2f}%")
+        print(f"Confusion matrix saved to checkpoints/confusion_matrix.png")
+    else:
+        print("Evaluation step encountered errors (see above).")
+        
     print("="*70)
     
     return history, eval_acc, confusion_matrix
