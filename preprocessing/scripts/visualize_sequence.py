@@ -188,5 +188,6 @@ if __name__ == "__main__":
     else:
         # Action name and sequence index/filename
         action_name = sys.argv[1]
-        sequence_idx = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] != '--show' else 0
+        # Keep sequence_idx as string - visualize_action will handle int/string conversion
+        sequence_idx = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] != '--show' else '0'
         visualize_action(action_name, sequence_idx, show_live=show_live)
