@@ -5,8 +5,9 @@ Run this to prepare full dataset for training
 import sys
 from pathlib import Path
 
-# Add preprocessing to path
-sys.path.append(str(Path(__file__).parent / "preprocessing"))
+# Add project root to path (go up 2 levels: scripts -> preprocessing -> root)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 print("\n" + "="*70)
 print("DATA PREPARATION PIPELINE")
