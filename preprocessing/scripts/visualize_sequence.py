@@ -81,9 +81,17 @@ def visualize_sequence(npy_file_path, output_video_path=None, fps=10, show_live=
     sequence = np.load(npy_file_path)
     print(f"Loaded sequence: {sequence.shape}")
     
-    # Create video writer
+    # Create visualizations directory
+    npy_path = Path(npy_file_path)
+    vis_dir = SEQUENCE_PATH.parent / "visualizations"
+    vis_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create video writer with organized naming
     if output_video_path is None:
-        output_video_path = str(Path(npy_file_path).parent / "visualization.mp4")
+        # Format: action_name_video_name.mp4
+        action_name = npy_path.parent.name
+        video_name = npy_path.stem
+        output_video_path = str(vis_dir / f"{action_name}_{video_name}.mp4")
     
     # Video properties
     width, height = 640, 480
@@ -129,30 +137,46 @@ def visualize_action(action_name, sequence_idx=0, show_live=False):
     
     Args:
         action_name: Name of the action folder
-        sequence_idx: Index of sequence to visualize
+        sequence_idx: Index of sequence to visualize (or video filename without .npy)
         show_live: Display video in real-time (requires X11)
     """
-    # Updated path: action/sequence.npy (not action/sequence/sequence.npy)
-    npy_path = SEQUENCE_PATH / action_name / f"{sequence_idx}.npy"
+    # Try as index first, then as filename
+    if isinstance(sequence_idx, int) or sequence_idx.isdigit():
+        # Index mode: find nth file
+        npy_files = sorted((SEQUENCE_PATH / action_name).glob('*.npy'))
+        if not npy_files:
+            print(f"[ERROR] No .npy files found in {action_name}")
+            return
+        idx = int(sequence_idx)
+        if idx >= len(npy_files):
+            print(f"[ERROR] Index {idx} out of range (only {len(npy_files)} files)")
+            return
+        npy_path = npy_files[idx]
+    else:
+        # Filename mode
+        npy_path = SEQUENCE_PATH / action_name / f"{sequence_idx}.npy"
     
     if not npy_path.exists():
         print(f"[ERROR] File not found: {npy_path}")
         return
     
-    output_path = SEQUENCE_PATH / action_name / f"sequence_{sequence_idx}_visualization.mp4"
-    visualize_sequence(str(npy_path), str(output_path), show_live=show_live)
+    visualize_sequence(str(npy_path), show_live=show_live)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python visualize_sequence.py <action_name> [sequence_idx] [--show]")
+        print("  python visualize_sequence.py <action_name> [sequence_idx_or_filename] [--show]")
         print("  python visualize_sequence.py <path_to_npy_file> [--show]")
         print("\nOptions:")
         print("  --show    Display video in real-time (requires X11)")
-        print("\nExample:")
-        print("  python visualize_sequence.py videos 0")
-        print("  python visualize_sequence.py videos 0 --show")
+        print("\nExamples:")
+        print("  python visualize_sequence.py bad 0              # First video in 'bad' class")
+        print("  python visualize_sequence.py bad MVI_5161       # Specific video by name")
+        print("  python visualize_sequence.py bad 0 --show       # With live preview")
+        print("\nOutput:")
+        print("  Videos saved to: data/INCLUDE/visualizations/")
+        print("  Naming format: <action>_<video>.mp4")
         sys.exit(1)
     
     # Check for --show flag
@@ -162,7 +186,7 @@ if __name__ == "__main__":
         # Direct .npy file path
         visualize_sequence(sys.argv[1], show_live=show_live)
     else:
-        # Action name and sequence index
+        # Action name and sequence index/filename
         action_name = sys.argv[1]
-        sequence_idx = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != '--show' else 0
+        sequence_idx = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] != '--show' else 0
         visualize_action(action_name, sequence_idx, show_live=show_live)
