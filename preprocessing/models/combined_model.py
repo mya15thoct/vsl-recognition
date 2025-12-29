@@ -6,7 +6,7 @@ from tensorflow.keras import layers
 from .cnn_model import create_spatial_cnn
 
 
-def create_sign_language_model(num_classes, sequence_length=130, keypoint_dim=1662):
+def create_sign_language_model(num_classes, sequence_length, keypoint_dim=1662):
     """
     End-to-end CNN+LSTM model
     
@@ -20,12 +20,16 @@ def create_sign_language_model(num_classes, sequence_length=130, keypoint_dim=16
     """
     inputs = layers.Input(shape=(sequence_length, keypoint_dim), name='sequence_input')
     
+    # Masking layer: ignore zero-padded frames
+    # This tells LSTM to skip frames where all keypoints are 0
+    x = layers.Masking(mask_value=0.0, name='masking')(inputs)
+    
     # CNN: Extract spatial features
     cnn = create_spatial_cnn(input_dim=keypoint_dim, output_dim=256)
     
     # Apply CNN to each frame using TimeDistributed
-    # (130, 1662) -> (130, 256)
-    x = layers.TimeDistributed(cnn, name='spatial_features')(inputs)
+    # (variable_length, 1662) -> (variable_length, 256)
+    x = layers.TimeDistributed(cnn, name='spatial_features')(x)
     
     # LSTM: Learn temporal patterns
     # (130, 256) -> (64,)

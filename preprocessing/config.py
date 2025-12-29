@@ -25,8 +25,10 @@ MP_MIN_DETECTION_CONFIDENCE = 0.5
 MP_MIN_TRACKING_CONFIDENCE = 0.5
 
 # ==================== DATA SETTINGS ====================
-# Fixed sequence length (number of frames per sequence)
-SEQUENCE_LENGTH = 32  # INCLUDE uses 32 frames per video
+# Variable sequence length - extract all frames from videos
+SEQUENCE_LENGTH = None  # No fixed length - save all frames
+MAX_SEQUENCE_LENGTH = 200  # Maximum length for padding (will be auto-detected if None)
+PADDING_VALUE = 0.0  # Value to use for padding shorter sequences
 
 # Number of sequences from each video
 NO_SEQUENCES = 1  # INCLUDE: 1 sequence per video (no augmentation needed)

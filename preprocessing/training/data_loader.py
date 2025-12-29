@@ -13,14 +13,14 @@ from config import SEQUENCE_PATH
 
 def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None):
     """
-    Load all sequences and labels
+    Load all sequences and labels, padding to uniform length
     
     Args:
         sequence_path: Path to sequences directory
         max_sequences_per_action: Limit sequences per action (None = all). Use for testing with limited RAM.
     
     Returns:
-        X: np.array (num_samples, 130, 1662)
+        X: np.array (num_samples, max_length, 1662) - padded sequences
         y: np.array (num_samples,) - label indices
         action_names: list - Action names
     """
@@ -34,6 +34,7 @@ def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None):
     
     X = []
     y = []
+    sequence_lengths = []
     
     for label_idx, action_folder in enumerate(action_folders):
         npy_files = sorted(action_folder.glob('*.npy'))
@@ -46,10 +47,30 @@ def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None):
             seq = np.load(npy_file)
             X.append(seq)
             y.append(label_idx)
+            sequence_lengths.append(len(seq))
         
         print(f"  [{label_idx+1}/{len(action_folders)}] {action_folder.name}: {len(npy_files)} sequences")
     
-    X = np.array(X)
+    # Find max sequence length for padding
+    max_length = max(sequence_lengths)
+    print(f"\n  Sequence length stats:")
+    print(f"    Min: {min(sequence_lengths)} frames")
+    print(f"    Max: {max_length} frames")
+    print(f"    Mean: {np.mean(sequence_lengths):.1f} frames")
+    
+    # Pad all sequences to max_length
+    print(f"\n  Padding all sequences to {max_length} frames...")
+    X_padded = []
+    for seq in X:
+        if len(seq) < max_length:
+            # Pad with zeros
+            padding = np.zeros((max_length - len(seq), seq.shape[1]))
+            seq_padded = np.vstack([seq, padding])
+        else:
+            seq_padded = seq
+        X_padded.append(seq_padded)
+    
+    X = np.array(X_padded)
     y = np.array(y)
     
     print(f"\nLoaded {len(X)} sequences")

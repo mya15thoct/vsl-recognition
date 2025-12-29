@@ -73,19 +73,13 @@ def extract_include_keypoints():
             
             cap.release()
             
-            # Process sequence
-            if len(frames_data) > SEQUENCE_LENGTH:
-                # Downsample to SEQUENCE_LENGTH
-                indices = np.linspace(0, len(frames_data) - 1, SEQUENCE_LENGTH, dtype=int)
-                frames_data = [frames_data[i] for i in indices]
-            elif len(frames_data) < SEQUENCE_LENGTH:
-                # Pad with last frame
-                last_frame = frames_data[-1] if frames_data else np.zeros(1662)
-                while len(frames_data) < SEQUENCE_LENGTH:
-                    frames_data.append(last_frame.copy())
+            # Skip if no frames extracted
+            if len(frames_data) == 0:
+                print(f"    [WARNING] No frames extracted from {video_path.name}")
+                continue
             
-            # Save sequence
-            sequence_data = np.array(frames_data[:SEQUENCE_LENGTH])
+            # Save sequence with all frames (no downsampling)
+            sequence_data = np.array(frames_data)
             video_name = video_path.stem  # Filename without extension
             np.save(seq_class_path / f"{video_name}.npy", sequence_data)
             
