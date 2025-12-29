@@ -17,13 +17,14 @@ mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 
 
-def draw_landmarks_from_keypoints(image, keypoints_array):
+def draw_landmarks_from_keypoints(image, keypoints_array, debug=False):
     """
     Draw landmarks on image from flattened keypoints array
     
     Args:
         image: Blank image to draw on
         keypoints_array: 1662-dimensional keypoints (pose+face+hands)
+        debug: Print debug info about landmarks drawn
     
     Returns:
         Image with landmarks drawn
@@ -36,12 +37,19 @@ def draw_landmarks_from_keypoints(image, keypoints_array):
     
     h, w, _ = image.shape
     
-    # Draw pose landmarks with config colors
+    # Counters for debug
+    pose_drawn = 0
+    face_drawn = 0
+    lh_drawn = 0
+    rh_drawn = 0
+    
+    # Draw pose landmarks with config colors (LOWERED threshold from 0.5 to 0.3)
     pose_color = COLORS['pose'][0]
     for landmark in pose_kp:
-        if landmark[3] > 0.5:  # Check visibility
+        if landmark[3] > 0.3:  # Lower visibility threshold to show more points
             x, y = int(landmark[0] * w), int(landmark[1] * h)
             cv2.circle(image, (x, y), 4, pose_color, -1)
+            pose_drawn += 1
     
     # Draw face landmarks with config colors
     face_color = COLORS['face'][0]
@@ -49,6 +57,7 @@ def draw_landmarks_from_keypoints(image, keypoints_array):
         if landmark[0] > 0:
             x, y = int(landmark[0] * w), int(landmark[1] * h)
             cv2.circle(image, (x, y), 1, face_color, -1)
+            face_drawn += 1
     
     # Draw left hand with config colors
     lh_color = COLORS['left_hand'][0]
@@ -56,6 +65,7 @@ def draw_landmarks_from_keypoints(image, keypoints_array):
         if landmark[0] > 0:
             x, y = int(landmark[0] * w), int(landmark[1] * h)
             cv2.circle(image, (x, y), 4, lh_color, -1)
+            lh_drawn += 1
     
     # Draw right hand with config colors
     rh_color = COLORS['right_hand'][0]
@@ -63,6 +73,10 @@ def draw_landmarks_from_keypoints(image, keypoints_array):
         if landmark[0] > 0:
             x, y = int(landmark[0] * w), int(landmark[1] * h)
             cv2.circle(image, (x, y), 4, rh_color, -1)
+            rh_drawn += 1
+    
+    if debug:
+        print(f"  Landmarks drawn: Pose={pose_drawn}/33, Face={face_drawn}/468, LH={lh_drawn}/21, RH={rh_drawn}/21")
     
     return image
 
