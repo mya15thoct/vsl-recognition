@@ -91,11 +91,11 @@ def train_model():
     
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
-    # Use CNN-only model (no temporal modeling)
-    from models.cnn_model import create_cnn_model
-    print("  → Using CNN-Only architecture (no LSTM/Transformer)")
+    # Use CNN + Transformer hybrid model
+    from models.hybrid_model import create_hybrid_model
+    print("  → Using CNN + Transformer Hybrid architecture")
     
-    model = create_cnn_model(
+    model = create_hybrid_model(
         num_classes=num_classes,
         sequence_length=sequence_length
     )

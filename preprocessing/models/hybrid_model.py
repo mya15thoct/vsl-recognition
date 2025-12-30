@@ -1,139 +1,120 @@
 """
-Hybrid Model: CNN + Transformer (SIMPLIFIED VERSION)
-- CNN branches for spatial feature extraction
-- Transformer encoder for temporal modeling
-- NO MASKING (keeps it simple and working)
+Hybrid Model: CNN + Transformer
+Combines CNN spatial features with Transformer temporal modeling
 """
 import tensorflow as tf
 from tensorflow.keras import layers, Model
-import numpy as np
 
 from .cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
-from .transformer_encoder import PositionalEncoding, transformer_encoder_block
+from .transformer import PositionalEncoding, transformer_encoder_block
 
 
 def create_hybrid_model(num_classes, sequence_length, 
-                       num_transformer_blocks=2,
-                       num_heads=4, 
-                       head_size=64,
-                       ff_dim=512,
-                       dropout=0.3):
+                        num_transformer_blocks=2,
+                        num_heads=4,
+                        key_dim=64,
+                        ff_dim=512,
+                        dropout=0.3):
     """
-    Simplified Hybrid CNN + Transformer architecture
+    Hybrid CNN + Transformer Model
     
-    Flow:
-    1. Split input into pose/face/hands keypoints
-    2. CNN branches extract spatial features (TimeDistributed)
-    3. Concatenate features
-    4. Shared dense layers
-    5. Add positional encoding
-    6. Transformer encoder blocks (NO masking)
-    7. Global pooling
-    8. Classification head
+    Architecture:
+    1. Split keypoints → pose/face/hands
+    2. CNN branches (spatial features per frame)
+    3. Feature fusion (256D)
+    4. Positional encoding
+    5. Transformer encoder blocks (temporal modeling)
+    6. Global pooling
+    7. Classification
     
     Args:
         num_classes: Number of action classes
         sequence_length: Frames per sequence
-        num_transformer_blocks: Number of stacked transformer blocks
-        num_heads: Number of attention heads
-        head_size: Dimension per attention head
-        ff_dim: Feed-forward network hidden dimension
+        num_transformer_blocks: Number of stacked Transformer blocks
+        num_heads: Attention heads per block
+        key_dim: Dimension per attention head
+        ff_dim: Feed-forward hidden dimension
         dropout: Dropout rate
     
     Returns:
         Keras Model
     """
-    # === INPUT LAYER ===
-    inputs = layers.Input(shape=(sequence_length, 1662), name='sequence_input')
+    # === INPUT ===
+    inputs = layers.Input(shape=(sequence_length, 1662), name='input')
     
     # === SPLIT KEYPOINTS ===
-    # Pose: 0:132 (33 × 4)
-    # Face: 132:1536 (468 × 3) 
-    # Hands: 1536:1662 (21×2 × 3)
-    pose_keypoints = layers.Lambda(lambda x: x[:, :, :132], name='pose_split')(inputs)
-    face_keypoints = layers.Lambda(lambda x: x[:, :, 132:1536], name='face_split')(inputs)
-    hand_keypoints = layers.Lambda(lambda x: x[:, :, 1536:], name='hand_split')(inputs)
+    pose = layers.Lambda(lambda x: x[:, :, :132], name='pose_split')(inputs)
+    face = layers.Lambda(lambda x: x[:, :, 132:1536], name='face_split')(inputs)
+    hands = layers.Lambda(lambda x: x[:, :, 1536:], name='hand_split')(inputs)
     
-    # === CNN BRANCHES (Spatial Feature Extraction) ===
-    pose_branch = create_pose_branch(132, 'pose')     # 2 layers → 64 features
-    face_branch = create_face_branch(1404, 'face')    # 4 layers → 128 features
-    hand_branch = create_hand_branch(126, 'hand')     # 3 layers → 64 features
+    # === CNN BRANCHES (spatial features) ===
+    pose_branch = create_pose_branch(132, 'pose')
+    face_branch = create_face_branch(1404, 'face')
+    hand_branch = create_hand_branch(126, 'hand')
     
-    # Apply to each frame (TimeDistributed)
-    pose_features = layers.TimeDistributed(pose_branch, name='pose_features')(pose_keypoints)
-    face_features = layers.TimeDistributed(face_branch, name='face_features')(face_keypoints)
-    hand_features = layers.TimeDistributed(hand_branch, name='hand_features')(hand_keypoints)
+    pose_feat = layers.TimeDistributed(pose_branch, name='pose_td')(pose)
+    face_feat = layers.TimeDistributed(face_branch, name='face_td')(face)
+    hand_feat = layers.TimeDistributed(hand_branch, name='hand_td')(hands)
     
     # === FEATURE FUSION ===
-    # Concatenate: (64 + 128 + 64) = 256 dimensions
-    merged = layers.Concatenate(name='feature_fusion')([
-        pose_features, 
-        face_features, 
-        hand_features
-    ])
+    merged = layers.Concatenate(name='fusion')([pose_feat, face_feat, hand_feat])
+    # Shape: (batch, seq_len, 256)
     
-    # === SHARED LAYERS (Cross-part Interaction) ===
-    x = layers.TimeDistributed(
-        layers.Dense(256, activation='relu', name='shared_dense1'),
-        name='shared_td1'
-    )(merged)
-    x = layers.Dropout(dropout, name='dropout1')(x)
-    
-    x = layers.TimeDistributed(
-        layers.Dense(256, activation='relu', name='shared_dense2'),
-        name='shared_td2'
-    )(x)
-    x = layers.Dropout(dropout, name='dropout2')(x)
+    # === SHARED DENSE ===
+    x = layers.TimeDistributed(layers.Dense(256, activation='relu'), name='shared1')(merged)
+    x = layers.Dropout(dropout)(x)
     
     # === POSITIONAL ENCODING ===
-    x = PositionalEncoding(sequence_length, 256, name='pos_encoding')(x)
+    x = PositionalEncoding(sequence_length, 256, name='pos_enc')(x)
     
-    # === TRANSFORMER ENCODER (Temporal Modeling) ===
+    # === TRANSFORMER ENCODER ===
     for i in range(num_transformer_blocks):
         x = transformer_encoder_block(
             x,
-            head_size=head_size,
             num_heads=num_heads,
+            key_dim=key_dim,
             ff_dim=ff_dim,
             dropout=dropout,
-            name_prefix=f'transformer_block{i+1}'
+            name=f'transformer_{i+1}'
         )
     
     # === GLOBAL POOLING ===
-    # Average across time dimension
-    x = layers.GlobalAveragePooling1D(name='global_avg_pool')(x)
+    x = layers.GlobalAveragePooling1D(name='global_pool')(x)
     
-    # === CLASSIFICATION HEAD ===
+    # === CLASSIFICATION ===
     x = layers.Dense(128, activation='relu', name='dense1')(x)
-    x = layers.Dropout(0.5, name='dropout_final')(x)
+    x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
     
-    model = Model(inputs=inputs, outputs=outputs, name='Hybrid_CNN_Transformer')
-    return model
+    return Model(inputs=inputs, outputs=outputs, name='CNN_Transformer_Hybrid')
 
 
+# ============================================================
+# TEST
+# ============================================================
 if __name__ == "__main__":
-    print("Creating Simplified Hybrid CNN + Transformer Model...")
-    print("\nArchitecture:")
-    print("  1. CNN Spatial Features:")
-    print("     - Hand:  3 layers → 64 features")
-    print("     - Face:  4 layers → 128 features")
-    print("     - Pose:  2 layers → 64 features")
-    print("  2. Feature Fusion: 256 dimensions")
-    print("  3. Positional Encoding")
-    print("  4. Transformer (2 blocks, NO masking)")
-    print("  5. Global Pooling + Classification")
-    print()
+    import numpy as np
     
+    print("=" * 50)
+    print("Hybrid Model Test")
+    print("=" * 50)
+    
+    print("\n1. Creating model...")
     model = create_hybrid_model(num_classes=76, sequence_length=33)
+    print("   ✓ Model created")
+    
+    print("\n2. Model summary:")
     model.summary()
     
-    # Test forward pass
-    print("\nTesting forward pass...")
-    test_input = np.random.rand(2, 33, 1662).astype(np.float32)
-    test_output = model.predict(test_input, verbose=0)
+    print("\n3. Testing forward pass...")
+    x = np.random.rand(2, 33, 1662).astype(np.float32)
+    y = model.predict(x, verbose=0)
     
-    print(f"\n✓ Test passed!")
-    print(f"  Input:  {test_input.shape}")
-    print(f"  Output: {test_output.shape}")
-    print(f"  Probabilities sum: {test_output[0].sum():.4f}")
+    print(f"   Input:  {x.shape}")
+    print(f"   Output: {y.shape}")
+    print(f"   Sum:    {y[0].sum():.4f} (should be ~1.0)")
+    
+    if y.shape == (2, 76) and abs(y[0].sum() - 1.0) < 0.01:
+        print("\n   ✓ All tests passed!")
+    else:
+        print("\n   ✗ Test failed!")
