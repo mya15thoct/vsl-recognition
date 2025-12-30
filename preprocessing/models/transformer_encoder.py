@@ -50,7 +50,7 @@ class PositionalEncoding(layers.Layer):
         return config
 
 
-def transformer_encoder_block(inputs, head_size, num_heads, ff_dim, dropout=0.3, name_prefix='transformer'):
+def transformer_encoder_block(inputs, head_size, num_heads, ff_dim, dropout=0.3, mask=None, name_prefix='transformer'):
     """
     Single Transformer encoder block with:
     - Multi-head self-attention
@@ -64,18 +64,19 @@ def transformer_encoder_block(inputs, head_size, num_heads, ff_dim, dropout=0.3,
         num_heads: Number of attention heads
         ff_dim: Hidden dimension of feed-forward network
         dropout: Dropout rate
+        mask: Attention mask for padded sequences (batch, 1, 1, seq_len)
         name_prefix: Name prefix for layers
     
     Returns:
         Output tensor (same shape as input)
     """
-    # Multi-head self-attention
+    # Multi-head self-attention WITH MASK
     attention_output = layers.MultiHeadAttention(
         num_heads=num_heads,
         key_dim=head_size,
         dropout=dropout,
         name=f'{name_prefix}_mha'
-    )(inputs, inputs)
+    )(inputs, inputs, attention_mask=mask)
     
     attention_output = layers.Dropout(dropout)(attention_output)
     

@@ -12,10 +12,10 @@ from .transformer_encoder import PositionalEncoding, transformer_encoder_block
 
 
 def create_hybrid_model(num_classes, sequence_length, 
-                       num_transformer_blocks=2,
+                       num_transformer_blocks=1,
                        num_heads=4, 
                        head_size=64,
-                       ff_dim=256,
+                       ff_dim=512,
                        dropout=0.3):
     """
     Hybrid CNN + Transformer architecture:
@@ -47,7 +47,17 @@ def create_hybrid_model(num_classes, sequence_length,
     """
     # === INPUT LAYER ===
     inputs = layers.Input(shape=(sequence_length, 1662), name='sequence_input')
-    x = layers.Masking(mask_value=0.0)(inputs)
+    masked_input = layers.Masking(mask_value=0.0)(inputs)
+    
+    # Compute attention mask for Transformer
+    # Mask shape: (batch, seq_len) -> padded positions = False, real positions = True
+    mask = tf.keras.backend.not_equal(
+        tf.reduce_sum(tf.abs(inputs), axis=-1), 0.0
+    )
+    # Expand for attention: (batch, 1, 1, seq_len)
+    attention_mask = mask[:, tf.newaxis, tf.newaxis, :]
+    
+    x = masked_input
     
     # === SPLIT KEYPOINTS ===
     # Pose: 0:132 (33 × 4)
@@ -92,7 +102,7 @@ def create_hybrid_model(num_classes, sequence_length,
     # Add positional information
     x = PositionalEncoding(sequence_length, 256, name='pos_encoding')(x)
     
-    # Stack Transformer blocks
+    # Stack Transformer blocks with attention mask
     for i in range(num_transformer_blocks):
         x = transformer_encoder_block(
             x,
@@ -100,6 +110,7 @@ def create_hybrid_model(num_classes, sequence_length,
             num_heads=num_heads,
             ff_dim=ff_dim,
             dropout=dropout,
+            mask=attention_mask,
             name_prefix=f'transformer_block{i+1}'
         )
     
