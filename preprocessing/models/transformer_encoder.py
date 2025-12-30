@@ -39,6 +39,15 @@ class PositionalEncoding(layers.Layer):
     def call(self, x):
         """Add positional encoding to input"""
         return x + self.pos_enc[:tf.shape(x)[1], :]
+    
+    def get_config(self):
+        """Return config for serialization"""
+        config = super().get_config()
+        config.update({
+            "sequence_length": self.sequence_length,
+            "d_model": self.d_model
+        })
+        return config
 
 
 def transformer_encoder_block(inputs, head_size, num_heads, ff_dim, dropout=0.3, name_prefix='transformer'):
