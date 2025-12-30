@@ -91,11 +91,11 @@ def train_model():
     
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
-    # Use CNN + LSTM hybrid model
-    from models.hybrid_model import create_hybrid_multistream_model
-    print("  → Using CNN + LSTM Hybrid architecture")
+    # Use CNN + Transformer hybrid model
+    from models.hybrid_cnn_transformer import create_cnn_transformer_model
+    print("  → Using CNN + Transformer Hybrid architecture")
     
-    model = create_hybrid_multistream_model(
+    model = create_cnn_transformer_model(
         num_classes=num_classes,
         sequence_length=sequence_length
     )

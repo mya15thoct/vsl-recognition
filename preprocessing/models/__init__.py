@@ -1,8 +1,11 @@
 """
 Model architecture modules
 """
-from .hybrid_model import create_hybrid_multistream_model
+from .hybrid_cnn_transformer import create_cnn_transformer_model
+from .transformer import PositionalEncoding, transformer_encoder_block
 
 __all__ = [
-    'create_hybrid_multistream_model'
+    'create_cnn_transformer_model',
+    'PositionalEncoding',
+    'transformer_encoder_block'
 ]
