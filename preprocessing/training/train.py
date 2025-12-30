@@ -52,15 +52,19 @@ def train_model():
     print("  → Creating model architecture...")
     
     # Get sequence length from data shape
-    sequence_length = X_train.shape[1]  # Should be 32 for INCLUDE
+    sequence_length = X_train.shape[1]  # Should be 33 for INCLUDE
     keypoint_dim = X_train.shape[2]      # Should be 1662
     
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
-    model = create_sign_language_model(
-        num_classes=num_classes, 
-        sequence_length=sequence_length,
-        keypoint_dim=keypoint_dim
+    # Use HYBRID model (best for this dataset)
+    # Combines specialized branches + shared layers for cross-part learning
+    from models.hybrid_model import create_hybrid_multistream_model
+    print("  → Using HYBRID architecture (Specialized + Shared layers)")
+    
+    model = create_hybrid_multistream_model(
+        num_classes=num_classes,
+        sequence_length=sequence_length
     )
     print("  ✓ Model architecture created")
     
