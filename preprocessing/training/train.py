@@ -15,8 +15,43 @@ from training.data_loader import load_sequences, split_data, create_tf_dataset
 from config import TRAINING_CONFIG, CHECKPOINT_DIR, LOGS_DIR
 
 
+def configure_gpu():
+    """Configure GPU settings for TensorFlow"""
+    print("\n" + "="*70)
+    print("GPU CONFIGURATION")
+    print("="*70)
+    
+    # Check GPU availability
+    gpus = tf.config.list_physical_devices('GPU')
+    
+    if gpus:
+        try:
+            # Enable memory growth to prevent TF from allocating all GPU memory
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            
+            print(f"✓ Found {len(gpus)} GPU(s):")
+            for i, gpu in enumerate(gpus):
+                print(f"  GPU {i}: {gpu.name}")
+            
+            # Set visible devices
+            tf.config.set_visible_devices(gpus[0], 'GPU')
+            print(f"✓ Using GPU: {gpus[0].name}")
+            
+        except RuntimeError as e:
+            print(f"✗ GPU configuration error: {e}")
+    else:
+        print("✗ No GPU detected - training will use CPU (slower)")
+        print("  Check CUDA installation and TensorFlow-GPU compatibility")
+    
+    print("="*70 + "\n")
+
+
 def train_model():
     """Main training function"""
+    
+    # Configure GPU first
+    configure_gpu()
     
     print("="*70)
     print("SIGN LANGUAGE RECOGNITION - TRAINING")
@@ -37,15 +72,15 @@ def train_model():
     
     # 3. Create datasets
     print("\n[3/5] Creating TensorFlow datasets...")
-    print("  → Creating training dataset...")
+    print("Creating training dataset...")
     train_ds = create_tf_dataset(X_train, y_train, batch_size=TRAINING_CONFIG['batch_size'], shuffle=True)
-    print("  ✓ Training dataset created")
-    print("  → Creating validation dataset...")
+    print("Training dataset created")
+    print("Creating validation dataset...")
     val_ds = create_tf_dataset(X_val, y_val, batch_size=TRAINING_CONFIG['batch_size'], shuffle=False)
-    print("  ✓ Validation dataset created")
-    print("  → Creating test dataset...")
+    print("Validation dataset created")
+    print("Creating test dataset...")
     test_ds = create_tf_dataset(X_test, y_test, batch_size=TRAINING_CONFIG['batch_size'], shuffle=False)
-    print("  ✓ Test dataset created")
+    print(" Test dataset created")
     
     # 4. Build model
     print("\n[4/5] Building model...")
@@ -60,25 +95,25 @@ def train_model():
     # Use HYBRID model (best for this dataset)
     # Combines specialized branches + shared layers for cross-part learning
     from models.hybrid_model import create_hybrid_multistream_model
-    print("  → Using HYBRID architecture (Specialized + Shared layers)")
+    print("Using HYBRID architecture (Specialized + Shared layers)")
     
     model = create_hybrid_multistream_model(
         num_classes=num_classes,
         sequence_length=sequence_length
     )
-    print("  ✓ Model architecture created")
+    print("  Model architecture created")
     
-    print("  → Compiling model...")
+    print(" Compiling model...")
     model.compile(
         optimizer=Adam(learning_rate=TRAINING_CONFIG['learning_rate']),
         loss='categorical_crossentropy',
         metrics=['accuracy']
     )
-    print("  ✓ Model compiled")
+    print("Model compiled")
     
-    print("  → Model summary:")
+    print("Model summary:")
     model.summary()
-    print("  ✓ Model ready")
+    print("Model ready")
     
     # 5. Setup callbacks
     print("\n[5/5] Setting up training...")
@@ -155,7 +190,6 @@ def train_model():
     
     print(f"\nTraining complete")
     print(f"   Best model: {CHECKPOINT_DIR / 'best_model.h5'}")
-    print(f"   Final model: {CHECKPOINT_DIR / 'final_model.h5'}")
     print(f"   TensorBoard: tensorboard --logdir={LOGS_DIR}")
     
     return history, test_acc
