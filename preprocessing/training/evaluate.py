@@ -15,6 +15,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from training.data_loader import load_sequences, split_data
 from config import CHECKPOINT_DIR
+from models.utils import load_model_safe
 
 
 def evaluate_model(model_path=None):
@@ -26,7 +27,7 @@ def evaluate_model(model_path=None):
         model_path = CHECKPOINT_DIR / 'best_model.h5'
     
     print(f"Loading model: {model_path}")
-    model = tf.keras.models.load_model(model_path)
+    model = load_model_safe(model_path)
     
     # Load data
     print("\nLoading test data...")
