@@ -14,7 +14,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from config import SEQUENCE_LENGTH, CHECKPOINT_DIR
 from utils.keypoint_extraction import extract_keypoints
-from models.utils import load_model_safe
 
 # MediaPipe setup
 mp_holistic = mp.solutions.holistic
@@ -29,7 +28,7 @@ def load_model_and_actions(model_path=None, mapping_path=None):
         mapping_path = CHECKPOINT_DIR / 'action_mapping.json'
     
     print(f"Loading model: {model_path}")
-    model = load_model_safe(model_path)
+    model = tf.keras.models.load_model(model_path)
     
     print(f"Loading action mapping: {mapping_path}")
     with open(mapping_path, 'r', encoding='utf-8') as f:
