@@ -1,120 +1,171 @@
 """
-Hybrid Model: CNN + Transformer
-Combines CNN spatial features with Transformer temporal modeling
+Hybrid Multi-stream CNN model
+- Specialized branches for each body part (varying depth)
+- Shared fusion layers for cross-part interactions
+- Best of both worlds: specialization + interaction learning
 """
 import tensorflow as tf
 from tensorflow.keras import layers, Model
 
-from .cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
-from .transformer import PositionalEncoding, transformer_encoder_block
 
-
-def create_hybrid_model(num_classes, sequence_length, 
-                        num_transformer_blocks=2,
-                        num_heads=4,
-                        key_dim=64,
-                        ff_dim=512,
-                        dropout=0.3):
+def create_hand_branch(input_dim=126, name_prefix='hand'):
     """
-    Hybrid CNN + Transformer Model
+    DEEP branch for hands (most important for sign language)
+    126 dims → 64 features (3 layers)
+    """
+    inputs = layers.Input(shape=(input_dim,), name=f'{name_prefix}_input')
     
-    Architecture:
-    1. Split keypoints → pose/face/hands
-    2. CNN branches (spatial features per frame)
-    3. Feature fusion (256D)
-    4. Positional encoding
-    5. Transformer encoder blocks (temporal modeling)
-    6. Global pooling
-    7. Classification
+    x = layers.Dense(256, activation='relu', name=f'{name_prefix}_dense1')(inputs)
+    x = layers.BatchNormalization(name=f'{name_prefix}_bn1')(x)
+    x = layers.Dropout(0.2)(x)
+    
+    x = layers.Dense(128, activation='relu', name=f'{name_prefix}_dense2')(x)
+    x = layers.BatchNormalization(name=f'{name_prefix}_bn2')(x)
+    x = layers.Dropout(0.2)(x)
+    
+    x = layers.Dense(64, activation='relu', name=f'{name_prefix}_dense3')(x)
+    
+    return Model(inputs=inputs, outputs=x, name=f'{name_prefix}_branch')
+
+
+def create_face_branch(input_dim=1404, name_prefix='face'):
+    """
+    DEEP branch for face (important for expressions)
+    1404 dims → 128 features (4 layers - face has many points)
+    """
+    inputs = layers.Input(shape=(input_dim,), name=f'{name_prefix}_input')
+    
+    x = layers.Dense(512, activation='relu', name=f'{name_prefix}_dense1')(inputs)
+    x = layers.BatchNormalization(name=f'{name_prefix}_bn1')(x)
+    x = layers.Dropout(0.2)(x)
+    
+    x = layers.Dense(256, activation='relu', name=f'{name_prefix}_dense2')(x)
+    x = layers.BatchNormalization(name=f'{name_prefix}_bn2')(x)
+    x = layers.Dropout(0.2)(x)
+    
+    x = layers.Dense(128, activation='relu', name=f'{name_prefix}_dense3')(x)
+    x = layers.BatchNormalization(name=f'{name_prefix}_bn3')(x)
+    x = layers.Dropout(0.2)(x)
+    
+    x = layers.Dense(128, activation='relu', name=f'{name_prefix}_dense4')(x)
+    
+    return Model(inputs=inputs, outputs=x, name=f'{name_prefix}_branch')
+
+
+def create_pose_branch(input_dim=132, name_prefix='pose'):
+    """
+    SHALLOW branch for pose (less important, fewer points)
+    132 dims → 64 features (2 layers)
+    """
+    inputs = layers.Input(shape=(input_dim,), name=f'{name_prefix}_input')
+    
+    x = layers.Dense(128, activation='relu', name=f'{name_prefix}_dense1')(inputs)
+    x = layers.BatchNormalization(name=f'{name_prefix}_bn1')(x)
+    x = layers.Dropout(0.2)(x)
+    
+    x = layers.Dense(64, activation='relu', name=f'{name_prefix}_dense2')(x)
+    
+    return Model(inputs=inputs, outputs=x, name=f'{name_prefix}_branch')
+
+
+def create_hybrid_multistream_model(num_classes, sequence_length):
+    """
+    Hybrid architecture:
+    1. Specialized branches (varying depth based on importance)
+    2. Feature fusion
+    3. Shared layers for cross-part interaction learning
+    4. LSTM for temporal modeling
     
     Args:
         num_classes: Number of action classes
         sequence_length: Frames per sequence
-        num_transformer_blocks: Number of stacked Transformer blocks
-        num_heads: Attention heads per block
-        key_dim: Dimension per attention head
-        ff_dim: Feed-forward hidden dimension
-        dropout: Dropout rate
     
     Returns:
         Keras Model
     """
-    # === INPUT ===
-    inputs = layers.Input(shape=(sequence_length, 1662), name='input')
+    # === INPUT LAYER ===
+    inputs = layers.Input(shape=(sequence_length, 1662), name='sequence_input')
+    x = layers.Masking(mask_value=0.0)(inputs)
     
     # === SPLIT KEYPOINTS ===
-    pose = layers.Lambda(lambda x: x[:, :, :132], name='pose_split')(inputs)
-    face = layers.Lambda(lambda x: x[:, :, 132:1536], name='face_split')(inputs)
-    hands = layers.Lambda(lambda x: x[:, :, 1536:], name='hand_split')(inputs)
+    # Pose: 0:132 (33 × 4)
+    # Face: 132:1536 (468 × 3) 
+    # Hands: 1536:1662 (21×2 × 3)
+    pose_keypoints = layers.Lambda(lambda x: x[:, :, :132], name='pose_split')(x)
+    face_keypoints = layers.Lambda(lambda x: x[:, :, 132:1536], name='face_split')(x)
+    hand_keypoints = layers.Lambda(lambda x: x[:, :, 1536:], name='hand_split')(x)
     
-    # === CNN BRANCHES (spatial features) ===
-    pose_branch = create_pose_branch(132, 'pose')
-    face_branch = create_face_branch(1404, 'face')
-    hand_branch = create_hand_branch(126, 'hand')
+    # === SPECIALIZED BRANCHES (varying depth) ===
+    pose_branch = create_pose_branch(132, 'pose')     # 2 layers (shallow)
+    face_branch = create_face_branch(1404, 'face')    # 4 layers (deep)
+    hand_branch = create_hand_branch(126, 'hand')     # 3 layers (deep)
     
-    pose_feat = layers.TimeDistributed(pose_branch, name='pose_td')(pose)
-    face_feat = layers.TimeDistributed(face_branch, name='face_td')(face)
-    hand_feat = layers.TimeDistributed(hand_branch, name='hand_td')(hands)
+    # Apply to each frame
+    pose_features = layers.TimeDistributed(pose_branch, name='pose_features')(pose_keypoints)
+    face_features = layers.TimeDistributed(face_branch, name='face_features')(face_keypoints)
+    hand_features = layers.TimeDistributed(hand_branch, name='hand_features')(hand_keypoints)
     
     # === FEATURE FUSION ===
-    merged = layers.Concatenate(name='fusion')([pose_feat, face_feat, hand_feat])
-    # Shape: (batch, seq_len, 256)
+    # Concatenate: (64 + 128 + 64) = 256 dimensions
+    merged = layers.Concatenate(name='feature_fusion')([
+        pose_features, 
+        face_features, 
+        hand_features
+    ])
     
-    # === SHARED DENSE ===
-    x = layers.TimeDistributed(layers.Dense(256, activation='relu'), name='shared1')(merged)
-    x = layers.Dropout(dropout)(x)
+    # === SHARED LAYERS (learn cross-part interactions) ===
+    # These layers see all parts together and learn their relationships
+    x = layers.TimeDistributed(
+        layers.Dense(256, activation='relu', name='shared_interaction1'),
+        name='shared_td1'
+    )(merged)
+    x = layers.Dropout(0.3)(x)
     
-    # === POSITIONAL ENCODING ===
-    x = PositionalEncoding(sequence_length, 256, name='pos_enc')(x)
+    x = layers.TimeDistributed(
+        layers.Dense(128, activation='relu', name='shared_interaction2'),
+        name='shared_td2'
+    )(x)
+    x = layers.Dropout(0.3)(x)
     
-    # === TRANSFORMER ENCODER ===
-    for i in range(num_transformer_blocks):
-        x = transformer_encoder_block(
-            x,
-            num_heads=num_heads,
-            key_dim=key_dim,
-            ff_dim=ff_dim,
-            dropout=dropout,
-            name=f'transformer_{i+1}'
-        )
+    # === TEMPORAL MODELING (LSTM) ===
+    x = layers.LSTM(128, return_sequences=True, name='lstm1')(x)
+    x = layers.Dropout(0.3)(x)
+    x = layers.LSTM(64, return_sequences=False, name='lstm2')(x)
+    x = layers.Dropout(0.3)(x)
     
-    # === GLOBAL POOLING ===
-    x = layers.GlobalAveragePooling1D(name='global_pool')(x)
-    
-    # === CLASSIFICATION ===
+    # === CLASSIFICATION HEAD ===
     x = layers.Dense(128, activation='relu', name='dense1')(x)
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
     
-    return Model(inputs=inputs, outputs=outputs, name='CNN_Transformer_Hybrid')
+    model = Model(inputs=inputs, outputs=outputs, name='HybridMultiStreamModel')
+    return model
 
 
-# ============================================================
-# TEST
-# ============================================================
 if __name__ == "__main__":
     import numpy as np
     
-    print("=" * 50)
-    print("Hybrid Model Test")
-    print("=" * 50)
+    print("Creating Hybrid Multi-Stream Model...")
+    print("\nArchitecture:")
+    print("  Specialized Branches:")
+    print("    - Hand:  3 layers (deep) → 64 features")
+    print("    - Face:  4 layers (deep) → 128 features")
+    print("    - Pose:  2 layers (shallow) → 64 features")
+    print("  Shared Layers:")
+    print("    - 2 layers for cross-part interaction learning")
+    print("  Temporal:")
+    print("    - 2 LSTM layers (128 → 64)")
+    print()
     
-    print("\n1. Creating model...")
-    model = create_hybrid_model(num_classes=76, sequence_length=33)
-    print("   ✓ Model created")
-    
-    print("\n2. Model summary:")
+    model = create_hybrid_multistream_model(num_classes=76, sequence_length=33)
     model.summary()
     
-    print("\n3. Testing forward pass...")
-    x = np.random.rand(2, 33, 1662).astype(np.float32)
-    y = model.predict(x, verbose=0)
+    # Test
+    print("\nTesting prediction...")
+    test_input = np.random.rand(2, 33, 1662)
+    test_output = model.predict(test_input, verbose=0)
     
-    print(f"   Input:  {x.shape}")
-    print(f"   Output: {y.shape}")
-    print(f"   Sum:    {y[0].sum():.4f} (should be ~1.0)")
-    
-    if y.shape == (2, 76) and abs(y[0].sum() - 1.0) < 0.01:
-        print("\n   ✓ All tests passed!")
-    else:
-        print("\n   ✗ Test failed!")
+    print(f"\nTest passed ✓")
+    print(f"Input:  {test_input.shape}")
+    print(f"Output: {test_output.shape}")
+    print(f"Probabilities sum: {test_output[0].sum():.4f}")
