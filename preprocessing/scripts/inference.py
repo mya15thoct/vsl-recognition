@@ -176,24 +176,55 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
         threshold: Confidence threshold
         output_path: Path to save output video (optional)
     """
+    # Check if video file exists
+    video_path_obj = Path(video_path)
+    if not video_path_obj.exists():
+        print(f"❌ ERROR: Video file not found: {video_path}")
+        print(f"   Absolute path: {video_path_obj.absolute()}")
+        return
+    
+    print(f"\n{'='*70}")
+    print(f"VIDEO INFERENCE")
+    print(f"{'='*70}")
+    print(f"Video file: {video_path}")
+    print(f"File size: {video_path_obj.stat().st_size / (1024*1024):.2f} MB")
+    
     cap = cv2.VideoCapture(video_path)
+    
+    # Check if video opened successfully
+    if not cap.isOpened():
+        print(f"❌ ERROR: Cannot open video file: {video_path}")
+        print(f"   This could be due to:")
+        print(f"   - Unsupported codec")
+        print(f"   - Corrupted video file")
+        print(f"   - Missing codec libraries")
+        return
+    
+    # Get video properties
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    print(f"\nVideo Properties:")
+    print(f"  Resolution: {width}x{height}")
+    print(f"  FPS: {fps:.2f}")
+    print(f"  Total frames: {total_frames}")
+    print(f"  Duration: {total_frames/fps:.2f}s" if fps > 0 else "  Duration: Unknown")
+    print(f"{'='*70}\n")
     
     # Video writer setup
     if output_path:
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        out = cv2.VideoWriter(output_path, fourcc, int(fps), (width, height))
+        print(f"Output will be saved to: {output_path}")
     
     # Detection variables
     sequence = []
     current_action = "Waiting..."
     confidence = 0.0
     
-    print(f"\nProcessing video: {video_path}")
-    if output_path:
-        print(f"Output will be saved to: {output_path}")
+    print(f"Processing video: {video_path}")
     
     with mp_holistic.Holistic(
         min_detection_confidence=0.5,
@@ -204,9 +235,16 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
+                if frame_count == 0:
+                    print(f"❌ ERROR: Failed to read first frame!")
+                    print(f"   Video might be corrupted or codec unsupported")
                 break
             
             frame_count += 1
+            
+            # Progress indicator
+            if frame_count % 30 == 0:  # Every 30 frames (~1 second at 30fps)
+                print(f"  Processing frame {frame_count}...", end='\r')
             
             # MediaPipe detection
             image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -259,7 +297,9 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
         out.release()
         print(f"\n✓ Output video saved: {output_path}")
     cv2.destroyAllWindows()
-    print(f"\nProcessed {frame_count} frames.")
+    print(f"\n{'='*70}")
+    print(f"✓ Processed {frame_count} frames successfully")
+    print(f"{'='*70}")
 
 
 if __name__ == "__main__":

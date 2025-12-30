@@ -1,146 +1,65 @@
 # Sign Language Recognition
 
-Sign language action detection using MediaPipe and CNN+LSTM model.
+CNN + LSTM model for sign language recognition using MediaPipe keypoints.
 
-**Current Dataset**: INCLUDE (Indian Sign Language)
-- 76 classes
-- 1,166 videos
-- Isolated sign recognition
+## Quick Start
+
+```bash
+# 1. Extract keypoints from videos
+cd preprocessing
+python scripts/extract_include.py
+
+# 2. Train model
+cd training
+python run.py
+
+# 3. Evaluate
+python evaluate.py
+```
 
 ## Project Structure
 
 ```
-sign-language/
-├── data/                       # Dataset
-│   └── INCLUDE/                # INCLUDE dataset videos
-│   ├── scripts/                 # Validation scripts
-│   │   └── validate_extraction.py
-│   ├── extraction/              # Data extraction module
-│   │   └── collect_data.py      # Extract keypoints from videos
-│   ├── utils/                   # Utility functions (MediaPipe)
-│   │   ├── keypoint_extraction.py
-│   │   └── visualization.py
-│   └── config.py                # Configuration
-│
-└── data/                        # Dataset (gitignored)
-    ├── prepare_dataset.py       # Dataset preparation from QIPEDC
-    └── VSL_Isolated/            # Videos, frames, sequences
+preprocessing/
+├── models/
+│   └── hybrid_model.py   # CNN + LSTM
+├── training/
+│   ├── train.py          # Training
+│   ├── evaluate.py       # Evaluation
+│   └── run.py            # Entry point
+├── scripts/
+│   ├── extract_include.py  # Keypoint extraction
+│   └── inference.py        # Real-time inference
+└── config.py
 ```
 
-## Installation
+## Model Architecture
 
-### Option 1: Conda (Recommended for Linux)
-
-```bash
-# Create environment
-conda env create -f environment.yml
-
-# Activate environment
-conda activate vsl_preprocessing
 ```
-
-Or use the setup script:
-```bash
-chmod +x setup_linux.sh
-./setup_linux.sh
+Input (33 frames, 1662 keypoints)
+    ↓
+Split → Pose/Face/Hands
+    ↓
+CNN Branches (TimeDistributed)
+    ↓
+Concatenate (256D)
+    ↓
+LSTM (128 → 64)
+    ↓
+Dense → Softmax (76 classes)
 ```
-
-### Option 2: Pip
-
-```bash
-cd preprocessing
-pip install -r requirements.txt
-```
-
-## Usage
-
-### 1. Validate Extraction Quality
-
-Check MediaPipe extraction quality:
-
-```bash
-cd preprocessing
-python -m scripts.validate_extraction
-```
-
-### 2. Prepare Dataset (Optional)
-
-If you don't have a dataset yet:
-
-```bash
-cd data
-python prepare_dataset.py
-```
-
-### 3. Extract Keypoints
-
-```bash
-cd preprocessing
-python scripts/extract_include.py
-```
-
-This processes all videos in `data/INCLUDE/` and saves keypoint sequences to `data/INCLUDE/sequences/`.
-
-### 4. Train Model
-
-```bash
-cd preprocessing/training
-python run.py
-```
-
-This will:
-- Train the CNN+LSTM model on INCLUDE dataset
-- Save best model to `checkpoints/best_model.h5`
-- Generate training logs for TensorBoard
-
-### 5. Evaluate Model
-
-```bash
-cd preprocessing/training
-python evaluate.py
-```
-
-This will:
-- Test the model on test set
-- Generate classification report
-- Save confusion matrix to `checkpoints/confusion_matrix.png`
-
-### 6. Run Inference (Real-time Predictions)
-
-**Using webcam:**
-```bash
-cd preprocessing
-python -m scripts.inference --mode webcam
-```
-
-**Using video file:**
-```bash
-python -m scripts.inference --mode video --video path/to/video.mp4
-```
-
-**Save output video:**
-```bash
-python -m scripts.inference --mode video --video input.mp4 --output result.mp4 --headless
-```
-
-Press `q` to quit.
-
-## Technology Stack
-
-- **MediaPipe Holistic**: Extract keypoints (pose, face, hands)
-- **LSTM**: Sequential action classification model
-- **TensorFlow/Keras**: Deep learning framework
-- **OpenCV**: Video and image processing
 
 ## Dataset
 
-Dataset is crawled from [QIPEDC](https://qipedc.moet.gov.vn) - Vietnamese Sign Language Dictionary.
+- **INCLUDE**: Indian Sign Language
+- 76 classes, 1,166 videos
 
-## Additional Information
+## Inference
 
-- For detailed module documentation: [sign_language_detection/README.md](sign_language_detection/README.md)
-- Dataset preparation script: [data/prepare_dataset.py](data/prepare_dataset.py)
+```bash
+# Webcam
+python -m scripts.inference --mode webcam
 
-## License
-
-Research and educational purposes.
+# Video file
+python -m scripts.inference --mode video --video input.mp4
+```
