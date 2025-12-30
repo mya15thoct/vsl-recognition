@@ -7,7 +7,6 @@ from tensorflow.keras import layers
 import numpy as np
 
 
-@tf.keras.saving.register_keras_serializable(package="CustomLayers")
 class PositionalEncoding(layers.Layer):
     """
     Adds positional encoding to input sequences
