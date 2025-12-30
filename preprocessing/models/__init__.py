@@ -1,12 +1,16 @@
 """
 Model architecture modules
 """
-from .cnn_model import create_spatial_cnn
-from .lstm_model import create_temporal_lstm
-from .combined_model import create_sign_language_model
+from .hybrid_model import (
+    create_hybrid_multistream_model,
+    create_hand_branch,
+    create_face_branch,
+    create_pose_branch
+)
 
 __all__ = [
-    'create_spatial_cnn',
-    'create_temporal_lstm',
-    'create_sign_language_model'
+    'create_hybrid_multistream_model',
+    'create_hand_branch',
+    'create_face_branch',
+    'create_pose_branch'
 ]
