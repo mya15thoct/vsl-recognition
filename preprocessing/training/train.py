@@ -10,7 +10,6 @@ import json
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.combined_model import create_sign_language_model
 from training.data_loader import load_sequences, split_data, create_tf_dataset
 from config import TRAINING_CONFIG, CHECKPOINT_DIR, LOGS_DIR
 
