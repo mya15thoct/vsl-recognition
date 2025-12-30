@@ -29,18 +29,18 @@ def configure_gpu():
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
             
-            print(f"✓ Found {len(gpus)} GPU(s):")
+            print(f"Found {len(gpus)} GPU(s):")
             for i, gpu in enumerate(gpus):
                 print(f"  GPU {i}: {gpu.name}")
             
             # Set visible devices
             tf.config.set_visible_devices(gpus[0], 'GPU')
-            print(f"✓ Using GPU: {gpus[0].name}")
+            print(f"Using GPU: {gpus[0].name}")
             
         except RuntimeError as e:
-            print(f"✗ GPU configuration error: {e}")
+            print(f"GPU configuration error: {e}")
     else:
-        print("✗ No GPU detected - training will use CPU (slower)")
+        print("No GPU detected - training will use CPU (slower)")
         print("  Check CUDA installation and TensorFlow-GPU compatibility")
     
     print("="*70 + "\n")
@@ -91,12 +91,12 @@ def train_model():
     
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
-    # Use HYBRID model (best for this dataset)
-    # Combines specialized branches + shared layers for cross-part learning
-    from models.hybrid_model import create_hybrid_multistream_model
-    print("Using HYBRID architecture (Specialized + Shared layers)")
+    # Use hybrid CNN + Transformer model
+    # CNN branches for spatial features + Transformer for temporal modeling
+    from models.hybrid_model import create_hybrid_model
+    print(" Using Hybrid CNN + Transformer architecture")
     
-    model = create_hybrid_multistream_model(
+    model = create_hybrid_model(
         num_classes=num_classes,
         sequence_length=sequence_length
     )
