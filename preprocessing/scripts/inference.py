@@ -19,6 +19,10 @@ from utils.keypoint_extraction import extract_keypoints
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 
+# Inference uses fixed sequence length for sliding window
+# If SEQUENCE_LENGTH is None (variable length training), use default
+INFERENCE_SEQUENCE_LENGTH = SEQUENCE_LENGTH if SEQUENCE_LENGTH is not None else 130
+
 
 def load_model_and_actions(model_path=None, mapping_path=None):
     """Load trained model and action mapping"""
@@ -62,7 +66,7 @@ def inference_webcam(model, action_mapping, threshold=0.7):
     print("REAL-TIME SIGN LANGUAGE INFERENCE")
     print("="*70)
     print(f"Model: {len(action_mapping)} actions")
-    print(f"Sequence length: {SEQUENCE_LENGTH} frames")
+    print(f"Sequence length: {INFERENCE_SEQUENCE_LENGTH} frames")
     print(f"Confidence threshold: {threshold}")
     print("\nPress 'q' to quit")
     print("="*70 + "\n")
@@ -112,10 +116,10 @@ def inference_webcam(model, action_mapping, threshold=0.7):
             # Extract keypoints
             keypoints = extract_keypoints(results)
             sequence.append(keypoints)
-            sequence = sequence[-SEQUENCE_LENGTH:]  # Keep last N frames
+            sequence = sequence[-INFERENCE_SEQUENCE_LENGTH:]  # Keep last N frames
             
             # Predict when we have enough frames
-            if len(sequence) == SEQUENCE_LENGTH:
+            if len(sequence) == INFERENCE_SEQUENCE_LENGTH:
                 # Reshape for model: (1, 130, 1662)
                 input_data = np.expand_dims(sequence, axis=0)
                 
@@ -150,7 +154,7 @@ def inference_webcam(model, action_mapping, threshold=0.7):
                        (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
             
             # Sequence progress
-            progress = len(sequence) / SEQUENCE_LENGTH
+            progress = len(sequence) / INFERENCE_SEQUENCE_LENGTH
             cv2.rectangle(image, (10, 100), (10 + int(progress * (w-20)), 115), 
                          (0, 255, 0), -1)
             
@@ -179,7 +183,7 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
     # Check if video file exists
     video_path_obj = Path(video_path)
     if not video_path_obj.exists():
-        print(f"❌ ERROR: Video file not found: {video_path}")
+        print(f"ERROR: Video file not found: {video_path}")
         print(f"   Absolute path: {video_path_obj.absolute()}")
         return
     
@@ -193,7 +197,7 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
     
     # Check if video opened successfully
     if not cap.isOpened():
-        print(f"❌ ERROR: Cannot open video file: {video_path}")
+        print(f" ERROR: Cannot open video file: {video_path}")
         print(f"   This could be due to:")
         print(f"   - Unsupported codec")
         print(f"   - Corrupted video file")
@@ -262,10 +266,10 @@ def inference_video(model, action_mapping, video_path, threshold=0.7, output_pat
             # Extract keypoints
             keypoints = extract_keypoints(results)
             sequence.append(keypoints)
-            sequence = sequence[-SEQUENCE_LENGTH:]
+            sequence = sequence[-INFERENCE_SEQUENCE_LENGTH:]
             
             # Predict
-            if len(sequence) == SEQUENCE_LENGTH:
+            if len(sequence) == INFERENCE_SEQUENCE_LENGTH:
                 input_data = np.expand_dims(sequence, axis=0)
                 pred = model.predict(input_data, verbose=0)[0]
                 predicted_class = np.argmax(pred)
