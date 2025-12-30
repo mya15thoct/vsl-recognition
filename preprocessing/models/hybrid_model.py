@@ -47,17 +47,21 @@ def create_hybrid_model(num_classes, sequence_length,
     """
     # === INPUT LAYER ===
     inputs = layers.Input(shape=(sequence_length, 1662), name='sequence_input')
-    masked_input = layers.Masking(mask_value=0.0)(inputs)
     
-    # Compute attention mask for Transformer
-    # Mask shape: (batch, seq_len) -> padded positions = False, real positions = True
-    mask = tf.keras.backend.not_equal(
-        tf.reduce_sum(tf.abs(inputs), axis=-1), 0.0
-    )
-    # Expand for attention: (batch, 1, 1, seq_len)
-    attention_mask = mask[:, tf.newaxis, tf.newaxis, :]
+    # Apply masking layer (for RNN layers that may follow)
+    x = layers.Masking(mask_value=0.0)(inputs)
     
-    x = masked_input
+    # Compute attention mask at runtime
+    # MultiHeadAttention expects mask shape: (batch, seq_len) or (batch, 1, seq_len, seq_len)
+    # Keras will automatically broadcast (batch, seq_len) to correct shape
+    def compute_attention_mask(inp):
+        # inp shape: (batch, seq_len, features)
+        # Sum across features: if all zeros → padded position (False), else True
+        mask = tf.not_equal(tf.reduce_sum(tf.abs(inp), axis=-1), 0.0)
+        # Return shape: (batch, seq_len) - Keras will broadcast to attention dims
+        return tf.cast(mask, tf.float32)
+    
+    attention_mask = layers.Lambda(compute_attention_mask, name='compute_mask')(inputs)
     
     # === SPLIT KEYPOINTS ===
     # Pose: 0:132 (33 × 4)
