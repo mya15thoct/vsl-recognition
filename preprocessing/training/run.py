@@ -43,14 +43,14 @@ if gpus:
         # Enable memory growth (prevent OOM)
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
-        print(f"✓ Found {len(gpus)} GPU(s)")
+        print(f"Found {len(gpus)} GPU(s)")
         for i, gpu in enumerate(gpus):
             print(f"  GPU {i}: {gpu.name}")
-        print("✓ GPU memory growth enabled")
+        print("GPU memory growth enabled")
     except RuntimeError as e:
-        print(f"⚠ GPU configuration error: {e}")
+        print(f"GPU configuration error: {e}")
 else:
-    print("⚠ No GPU detected - training will use CPU (slower)")
+    print("No GPU detected - training will use CPU (slower)")
 
 print("="*70)
 print()

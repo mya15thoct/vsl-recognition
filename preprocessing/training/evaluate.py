@@ -45,7 +45,7 @@ def evaluate_model(model_path=None):
     # Check if all classes are present
     if len(unique_classes_in_test) < len(action_names):
         missing_classes = set(range(len(action_names))) - set(unique_classes_in_test)
-        print(f"\n⚠️  WARNING: {len(missing_classes)} class(es) not in test set (due to random split):")
+        print(f"\nWARNING: {len(missing_classes)} class(es) not in test set (due to random split):")
         for cls_idx in sorted(list(missing_classes))[:5]:
             print(f"     Class {cls_idx}: {action_names[cls_idx]}")
         if len(missing_classes) > 5:

@@ -1,80 +1,26 @@
 """
-Hybrid Multi-stream CNN model
-- Specialized branches for each body part (varying depth)
-- Shared fusion layers for cross-part interactions
-- Best of both worlds: specialization + interaction learning
+Hybrid CNN+LSTM Model for Sign Language Recognition
+- CNN branches for spatial feature extraction from each body part
+- LSTM layers for temporal modeling
+- Multi-stream architecture with specialized branches
 """
 import tensorflow as tf
 from tensorflow.keras import layers, Model
 
-
-def create_hand_branch(input_dim=126, name_prefix='hand'):
-    """
-    DEEP branch for hands (most important for sign language)
-    126 dims → 64 features (3 layers)
-    """
-    inputs = layers.Input(shape=(input_dim,), name=f'{name_prefix}_input')
-    
-    x = layers.Dense(256, activation='relu', name=f'{name_prefix}_dense1')(inputs)
-    x = layers.BatchNormalization(name=f'{name_prefix}_bn1')(x)
-    x = layers.Dropout(0.2)(x)
-    
-    x = layers.Dense(128, activation='relu', name=f'{name_prefix}_dense2')(x)
-    x = layers.BatchNormalization(name=f'{name_prefix}_bn2')(x)
-    x = layers.Dropout(0.2)(x)
-    
-    x = layers.Dense(64, activation='relu', name=f'{name_prefix}_dense3')(x)
-    
-    return Model(inputs=inputs, outputs=x, name=f'{name_prefix}_branch')
-
-
-def create_face_branch(input_dim=1404, name_prefix='face'):
-    """
-    DEEP branch for face (important for expressions)
-    1404 dims → 128 features (4 layers - face has many points)
-    """
-    inputs = layers.Input(shape=(input_dim,), name=f'{name_prefix}_input')
-    
-    x = layers.Dense(512, activation='relu', name=f'{name_prefix}_dense1')(inputs)
-    x = layers.BatchNormalization(name=f'{name_prefix}_bn1')(x)
-    x = layers.Dropout(0.2)(x)
-    
-    x = layers.Dense(256, activation='relu', name=f'{name_prefix}_dense2')(x)
-    x = layers.BatchNormalization(name=f'{name_prefix}_bn2')(x)
-    x = layers.Dropout(0.2)(x)
-    
-    x = layers.Dense(128, activation='relu', name=f'{name_prefix}_dense3')(x)
-    x = layers.BatchNormalization(name=f'{name_prefix}_bn3')(x)
-    x = layers.Dropout(0.2)(x)
-    
-    x = layers.Dense(128, activation='relu', name=f'{name_prefix}_dense4')(x)
-    
-    return Model(inputs=inputs, outputs=x, name=f'{name_prefix}_branch')
-
-
-def create_pose_branch(input_dim=132, name_prefix='pose'):
-    """
-    SHALLOW branch for pose (less important, fewer points)
-    132 dims → 64 features (2 layers)
-    """
-    inputs = layers.Input(shape=(input_dim,), name=f'{name_prefix}_input')
-    
-    x = layers.Dense(128, activation='relu', name=f'{name_prefix}_dense1')(inputs)
-    x = layers.BatchNormalization(name=f'{name_prefix}_bn1')(x)
-    x = layers.Dropout(0.2)(x)
-    
-    x = layers.Dense(64, activation='relu', name=f'{name_prefix}_dense2')(x)
-    
-    return Model(inputs=inputs, outputs=x, name=f'{name_prefix}_branch')
+# Handle both relative and absolute imports
+try:
+    from .cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
+except ImportError:
+    from cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
 
 
 def create_hybrid_multistream_model(num_classes, sequence_length):
     """
-    Hybrid architecture:
-    1. Specialized branches (varying depth based on importance)
-    2. Feature fusion
-    3. Shared layers for cross-part interaction learning
-    4. LSTM for temporal modeling
+    Hybrid CNN+LSTM architecture:
+    1. CNN branches for spatial feature extraction (varying depth based on importance)
+    2. Feature fusion across body parts
+    3. Shared Dense layers for cross-part interaction learning
+    4. LSTM layers for temporal modeling
     
     Args:
         num_classes: Number of action classes
@@ -95,12 +41,12 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     face_keypoints = layers.Lambda(lambda x: x[:, :, 132:1536], name='face_split')(x)
     hand_keypoints = layers.Lambda(lambda x: x[:, :, 1536:], name='hand_split')(x)
     
-    # === SPECIALIZED BRANCHES (varying depth) ===
-    pose_branch = create_pose_branch(132, 'pose')     # 2 layers (shallow)
-    face_branch = create_face_branch(1404, 'face')    # 4 layers (deep)
-    hand_branch = create_hand_branch(126, 'hand')     # 3 layers (deep)
+    # === CNN BRANCHES (varying depth) ===
+    pose_branch = create_pose_branch(132, 'pose')     # 2 Conv1D layers (shallow)
+    face_branch = create_face_branch(1404, 'face')    # 4 Conv1D layers (deep)
+    hand_branch = create_hand_branch(126, 'hand')     # 3 Conv1D layers (deep)
     
-    # Apply to each frame
+    # Apply CNN to each frame
     pose_features = layers.TimeDistributed(pose_branch, name='pose_features')(pose_keypoints)
     face_features = layers.TimeDistributed(face_branch, name='face_features')(face_keypoints)
     hand_features = layers.TimeDistributed(hand_branch, name='hand_features')(hand_keypoints)
@@ -138,22 +84,22 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
     
-    model = Model(inputs=inputs, outputs=outputs, name='HybridMultiStreamModel')
+    model = Model(inputs=inputs, outputs=outputs, name='CNN_LSTM_Model')
     return model
 
 
 if __name__ == "__main__":
     import numpy as np
     
-    print("Creating Hybrid Multi-Stream Model...")
+    print("Creating CNN+LSTM Model...")
     print("\nArchitecture:")
-    print("  Specialized Branches:")
-    print("    - Hand:  3 layers (deep) → 64 features")
-    print("    - Face:  4 layers (deep) → 128 features")
-    print("    - Pose:  2 layers (shallow) → 64 features")
-    print("  Shared Layers:")
+    print("  CNN Branches (Spatial Feature Extraction):")
+    print("    - Hand:  3 Conv1D layers (deep) → 64 features")
+    print("    - Face:  4 Conv1D layers (deep) → 128 features")
+    print("    - Pose:  2 Conv1D layers (shallow) → 64 features")
+    print("  Shared Dense Layers:")
     print("    - 2 layers for cross-part interaction learning")
-    print("  Temporal:")
+    print("  Temporal Modeling:")
     print("    - 2 LSTM layers (128 → 64)")
     print()
     

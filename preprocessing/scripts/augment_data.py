@@ -28,7 +28,6 @@ def augment_dataset(
         dry_run: If True, only print what would be done without creating files
     """
     if augmentation_methods is None:
-        # NOTE: DO NOT use 'reverse' for sign language - it breaks temporal semantics!
         augmentation_methods = ['noise', 'subsample', 'scale']
     
     print("=" * 70)
@@ -104,7 +103,7 @@ def augment_dataset(
                 break
         
         total_augmented += augmented_count
-        print(f"    ✓ Created {augmented_count} augmented samples")
+        print(f"Created {augmented_count} augmented samples")
     
     # Summary
     print("\n" + "=" * 70)
@@ -117,7 +116,7 @@ def augment_dataset(
     print("=" * 70)
     
     if dry_run:
-        print("\n⚠️  This was a DRY RUN - no files were created")
+        print("\n  This was a DRY RUN - no files were created")
         print("Run without --dry-run to actually create augmented files")
 
 

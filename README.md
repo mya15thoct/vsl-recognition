@@ -57,8 +57,6 @@ Dense → Softmax (76 classes)
 ## Inference
 
 ```bash
-# Webcam
-python -m scripts.inference --mode webcam
 
 # Video file
 python -m scripts.inference --mode video --video input.mp4

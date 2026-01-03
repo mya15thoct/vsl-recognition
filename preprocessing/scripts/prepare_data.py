@@ -48,7 +48,3 @@ augment_dataset(
 # Final summary
 print("\n\n" + "="*70)
 print("DATA PREPARATION COMPLETE!")
-print("="*70)
-print("Ready to train:")
-print("  python preprocessing/training/run.py")
-print("="*70 + "\n")
