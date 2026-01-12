@@ -91,9 +91,9 @@ def train_model():
     
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
-    # Use CNN + LSTM hybrid model
+    # Use MLP + LSTM hybrid model
     from models.hybrid_model import create_hybrid_multistream_model
-    print("  → Using CNN + LSTM Hybrid architecture")
+    print("  → Using MLP + LSTM Hybrid architecture")
     
     model = create_hybrid_multistream_model(
         num_classes=num_classes,

@@ -1,6 +1,6 @@
 """
-Hybrid CNN+LSTM Model for Sign Language Recognition
-- CNN branches for spatial feature extraction from each body part
+Hybrid MLP+LSTM Model for Sign Language Recognition
+- MLP (Dense) branches for feature extraction from each body part
 - LSTM layers for temporal modeling
 - Multi-stream architecture with specialized branches
 """
@@ -16,8 +16,8 @@ except ImportError:
 
 def create_hybrid_multistream_model(num_classes, sequence_length):
     """
-    Hybrid CNN+LSTM architecture:
-    1. CNN branches for spatial feature extraction (varying depth based on importance)
+    Hybrid MLP+LSTM architecture:
+    1. MLP (Dense) branches for feature extraction (varying depth based on importance)
     2. Feature fusion across body parts
     3. Shared Dense layers for cross-part interaction learning
     4. LSTM layers for temporal modeling
@@ -41,12 +41,12 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     face_keypoints = layers.Lambda(lambda x: x[:, :, 132:1536], name='face_split')(x)
     hand_keypoints = layers.Lambda(lambda x: x[:, :, 1536:], name='hand_split')(x)
     
-    # === CNN BRANCHES (varying depth) ===
-    pose_branch = create_pose_branch(132, 'pose')     # 2 Conv1D layers (shallow)
-    face_branch = create_face_branch(1404, 'face')    # 4 Conv1D layers (deep)
-    hand_branch = create_hand_branch(126, 'hand')     # 3 Conv1D layers (deep)
+    # === MLP BRANCHES (varying depth) ===
+    pose_branch = create_pose_branch(132, 'pose')     # 2 Dense layers (shallow)
+    face_branch = create_face_branch(1404, 'face')    # 4 Dense layers (deep)
+    hand_branch = create_hand_branch(126, 'hand')     # 3 Dense layers (deep)
     
-    # Apply CNN to each frame
+    # Apply MLP to each frame
     pose_features = layers.TimeDistributed(pose_branch, name='pose_features')(pose_keypoints)
     face_features = layers.TimeDistributed(face_branch, name='face_features')(face_keypoints)
     hand_features = layers.TimeDistributed(hand_branch, name='hand_features')(hand_keypoints)
@@ -84,19 +84,19 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
     
-    model = Model(inputs=inputs, outputs=outputs, name='CNN_LSTM_Model')
+    model = Model(inputs=inputs, outputs=outputs, name='MLP_LSTM_Model')
     return model
 
 
 if __name__ == "__main__":
     import numpy as np
     
-    print("Creating CNN+LSTM Model...")
+    print("Creating MLP+LSTM Model...")
     print("\nArchitecture:")
-    print("  CNN Branches (Spatial Feature Extraction):")
-    print("    - Hand:  3 Conv1D layers (deep) → 64 features")
-    print("    - Face:  4 Conv1D layers (deep) → 128 features")
-    print("    - Pose:  2 Conv1D layers (shallow) → 64 features")
+    print("  MLP Branches (Feature Extraction):")
+    print("    - Hand:  3 Dense layers (deep) → 64 features")
+    print("    - Face:  4 Dense layers (deep) → 128 features")
+    print("    - Pose:  2 Dense layers (shallow) → 64 features")
     print("  Shared Dense Layers:")
     print("    - 2 layers for cross-part interaction learning")
     print("  Temporal Modeling:")
