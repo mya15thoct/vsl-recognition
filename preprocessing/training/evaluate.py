@@ -26,12 +26,36 @@ def evaluate_model(model_path=None):
         model_path = CHECKPOINT_DIR / 'best_model.h5'
     
     print(f"Loading model: {model_path}")
-    model = tf.keras.models.load_model(model_path)
+    print(f"Model path exists: {Path(model_path).exists()}")
     
-    # Load data
+    try:
+        model = tf.keras.models.load_model(model_path)
+        print(f"✓ Model loaded successfully")
+    except Exception as e:
+        print(f"❌ Error loading model: {e}")
+        print(f"\nTroubleshooting:")
+        print(f"  1. Check if model file exists at: {model_path}")
+        print(f"  2. Verify the model was saved correctly")
+        print(f"  3. Try retraining the model")
+        raise
+    
+    # Get model's expected sequence length from input shape
+    model_input_shape = model.input_shape
+    expected_seq_length = model_input_shape[1]  # (None, seq_length, features)
+    print(f"\nModel input shape: {model_input_shape}")
+    print(f"Expected sequence length: {expected_seq_length} frames")
+    
+    # Load data with target sequence length matching the model
     print("\nLoading test data...")
-    X, y, action_names = load_sequences()
+    X, y, action_names = load_sequences(target_length=expected_seq_length)
     _, _, X_test, _, _, y_test = split_data(X, y)
+    
+    # Verify shapes match
+    print(f"\nShape verification:")
+    print(f"  Model expects: {model_input_shape}")
+    print(f"  Data shape: {X_test.shape}")
+    if X_test.shape[1:] != model_input_shape[1:]:
+        raise ValueError(f"Shape mismatch! Model expects {model_input_shape[1:]}, but data has {X_test.shape[1:]}")
     
     # Predict
     print("\nPredicting...")

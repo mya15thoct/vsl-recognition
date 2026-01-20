@@ -11,13 +11,14 @@ sys.path.append(str(Path(__file__).parent.parent))
 from config import SEQUENCE_PATH
 
 
-def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None):
+def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None, target_length=None):
     """
     Load all sequences and labels, padding to uniform length
     
     Args:
         sequence_path: Path to sequences directory
         max_sequences_per_action: Limit sequences per action (None = all). Use for testing with limited RAM.
+        target_length: Target sequence length for padding (None = auto-detect from data)
     
     Returns:
         X: np.array (num_samples, max_length, 1662) - padded sequences
@@ -51,21 +52,30 @@ def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None):
         
         print(f"  [{label_idx+1}/{len(action_folders)}] {action_folder.name}: {len(npy_files)} sequences")
     
-    # Find max sequence length for padding
-    max_length = max(sequence_lengths)
-    print(f"\n  Sequence length stats:")
+    # Determine padding length
+    if target_length is not None:
+        max_length = target_length
+        print(f"\n  Using target sequence length: {max_length} frames")
+    else:
+        max_length = max(sequence_lengths)
+        print(f"\n  Auto-detected max sequence length: {max_length} frames")
+    
+    print(f"  Sequence length stats:")
     print(f"    Min: {min(sequence_lengths)} frames")
-    print(f"    Max: {max_length} frames")
+    print(f"    Max: {max(sequence_lengths)} frames")
     print(f"    Mean: {np.mean(sequence_lengths):.1f} frames")
     
-    # Pad all sequences to max_length
-    print(f"\n  Padding all sequences to {max_length} frames...")
+    # Pad or truncate all sequences to max_length
+    print(f"\n  Padding/truncating all sequences to {max_length} frames...")
     X_padded = []
     for seq in X:
         if len(seq) < max_length:
             # Pad with zeros
             padding = np.zeros((max_length - len(seq), seq.shape[1]))
             seq_padded = np.vstack([seq, padding])
+        elif len(seq) > max_length:
+            # Truncate to max_length
+            seq_padded = seq[:max_length]
         else:
             seq_padded = seq
         X_padded.append(seq_padded)
