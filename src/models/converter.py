@@ -8,7 +8,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.models.stateful import create_stateful_model, load_weights_from_stateless
+from models.stateful_model import create_stateful_model, load_weights_from_stateless
 from tensorflow.keras.models import load_model
 
 

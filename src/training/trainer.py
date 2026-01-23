@@ -10,7 +10,7 @@ import json
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.training.data_loader import load_sequences, split_data, create_tf_dataset
+from training.data_loader import load_sequences, split_data, create_tf_dataset
 from config import TRAINING_CONFIG, CHECKPOINT_DIR, LOGS_DIR
 
 
@@ -92,7 +92,7 @@ def train_model():
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
     # Use MLP + LSTM hybrid model
-    from src.models.hybrid import create_hybrid_multistream_model
+    from models.hybrid_model import create_hybrid_multistream_model
     print("  → Using MLP + LSTM Hybrid architecture")
     
     model = create_hybrid_multistream_model(

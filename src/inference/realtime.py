@@ -13,7 +13,7 @@ import mediapipe as mp
 sys.path.append(str(Path(__file__).parent.parent))
 
 from config import SEQUENCE_LENGTH, CHECKPOINT_DIR
-from src.utils.extraction import extract_keypoints
+from utils.keypoint_extraction import extract_keypoints
 
 # MediaPipe setup
 mp_holistic = mp.solutions.holistic

@@ -5,7 +5,7 @@ Run this to prepare full dataset for training
 import sys
 from pathlib import Path
 
-# Add project root to path (go up 2 levels: data -> src -> root)
+# Add project root to path (go up 2 levels: scripts -> preprocessing -> root)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -16,19 +16,19 @@ print("="*70 + "\n")
 # STEP 1: Extract keypoints from videos
 print("STEP 1/3: Extracting keypoints from videos...")
 print("-" * 70)
-from src.data.extract import extract_include_keypoints
+from preprocessing.scripts.extract_include import extract_include_keypoints
 extract_include_keypoints()
 
 # STEP 2: Check data distribution
 print("\n\nSTEP 2/3: Checking data distribution...")
 print("-" * 70)
-from src.data.check_distribution import check_distribution
+from check_data_distribution import check_distribution
 class_stats, all_sequences, all_lengths = check_distribution()
 
 # STEP 3: Augment data (only if needed)
 print("\n\nSTEP 3/3: Augmenting data to balance classes...")
 print("-" * 70)
-from src.data.augment import augment_dataset
+from preprocessing.scripts.augment_data import augment_dataset
 
 # Calculate smart target based on data
 import numpy as np

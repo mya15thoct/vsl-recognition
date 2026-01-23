@@ -13,7 +13,7 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.training.data_loader import load_sequences, split_data
+from training.data_loader import load_sequences, split_data
 from config import CHECKPOINT_DIR
 
 

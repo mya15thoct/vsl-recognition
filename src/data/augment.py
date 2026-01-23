@@ -9,7 +9,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from config import SEQUENCE_PATH
-from src.utils.augmentation import augment_sequence, get_augmentation_methods
+from utils.augmentation import augment_sequence, get_augmentation_methods
 
 
 def augment_dataset(

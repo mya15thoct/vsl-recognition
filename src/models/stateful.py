@@ -7,9 +7,9 @@ from tensorflow.keras import layers, Model
 
 # Handle both relative and absolute imports
 try:
-    from .components import create_hand_branch, create_face_branch, create_pose_branch
+    from .cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
 except ImportError:
-    from components import create_hand_branch, create_face_branch, create_pose_branch
+    from cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
 
 
 def create_stateful_model(num_classes, timesteps=1):
