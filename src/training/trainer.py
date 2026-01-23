@@ -92,7 +92,7 @@ def train_model():
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
     # Use MLP + LSTM hybrid model
-    from models.hybrid_model import create_hybrid_multistream_model
+    from models.hybrid import create_hybrid_multistream_model
     print("  → Using MLP + LSTM Hybrid architecture")
     
     model = create_hybrid_multistream_model(

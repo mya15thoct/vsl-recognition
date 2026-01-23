@@ -9,9 +9,9 @@ from tensorflow.keras import layers, Model
 
 # Handle both relative and absolute imports
 try:
-    from .cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
+    from .components import create_hand_branch, create_face_branch, create_pose_branch
 except ImportError:
-    from cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
+    from components import create_hand_branch, create_face_branch, create_pose_branch
 
 
 def create_hybrid_multistream_model(num_classes, sequence_length):
