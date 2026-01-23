@@ -7,9 +7,9 @@ from tensorflow.keras import layers, Model
 
 # Handle both relative and absolute imports
 try:
-    from .cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
+    from .components import create_hand_branch, create_face_branch, create_pose_branch
 except ImportError:
-    from cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
+    from components import create_hand_branch, create_face_branch, create_pose_branch
 
 
 def create_stateful_model(num_classes, timesteps=1):
@@ -102,11 +102,11 @@ def load_weights_from_stateless(stateful_model, stateless_model_path):
     for stateful_layer, stateless_layer in zip(stateful_model.layers, stateless_model.layers):
         try:
             stateful_layer.set_weights(stateless_layer.get_weights())
-            print(f"✓ Copied weights: {stateful_layer.name}")
+            print(f"Copied weights: {stateful_layer.name}")
         except Exception as e:
-            print(f"✗ Skipped layer {stateful_layer.name}: {e}")
+            print(f"Skipped layer {stateful_layer.name}: {e}")
     
-    print("\n✓ Weights loaded successfully!")
+    print("\n Weights loaded successfully!")
     return stateful_model
 
 

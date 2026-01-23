@@ -8,7 +8,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models.stateful_model import create_stateful_model, load_weights_from_stateless
+from src.models.stateful import create_stateful_model, load_weights_from_stateless
 from tensorflow.keras.models import load_model
 
 
@@ -35,7 +35,7 @@ def convert_to_stateful(stateless_model_path, output_path, num_classes, timestep
     print(f"  - num_classes: {num_classes}")
     print(f"  - timesteps: {timesteps}")
     stateful_model = create_stateful_model(num_classes=num_classes, timesteps=timesteps)
-    print("  ✓ Stateful model created")
+    print("  Stateful model created")
     
     # 2. Load weights from stateless
     print(f"\n[2/4] Loading weights from stateless model...")
@@ -53,10 +53,10 @@ def convert_to_stateful(stateless_model_path, output_path, num_classes, timestep
     print(f"\n[4/4] Saving stateful model...")
     print(f"  - Output: {output_path}")
     stateful_model.save(output_path)
-    print("  ✓ Stateful model saved")
+    print("  Stateful model saved")
     
     print("\n" + "=" * 70)
-    print("✓ CONVERSION COMPLETED SUCCESSFULLY!")
+    print(" CONVERSION COMPLETED SUCCESSFULLY!")
     print("=" * 70)
     print(f"\nStateful model saved to: {output_path}")
     print(f"Use this model for variable-length inference.")
@@ -92,9 +92,9 @@ def verify_conversion(stateless_path, stateful_model, num_classes):
     print(f"  - Max difference: {diff:.6f}")
     
     if diff < 1e-4:
-        print("  ✓ Predictions match!")
+        print("  Predictions match!")
     else:
-        print(f"  ⚠ Predictions differ by {diff:.6f}")
+        print(f" Predictions differ by {diff:.6f}")
         print("    This is normal due to numerical precision.")
 
 

@@ -11,7 +11,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from config import DATA_DIR, SEQUENCE_PATH, SEQUENCE_LENGTH
-from utils.keypoint_extraction import mediapipe_detection, extract_keypoints, get_holistic_model
+from src.utils.extraction import mediapipe_detection, extract_keypoints, get_holistic_model
 
 def extract_include_keypoints():
     """

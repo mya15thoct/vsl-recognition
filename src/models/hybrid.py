@@ -9,9 +9,9 @@ from tensorflow.keras import layers, Model
 
 # Handle both relative and absolute imports
 try:
-    from .cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
+    from .components import create_hand_branch, create_face_branch, create_pose_branch
 except ImportError:
-    from cnn_branches import create_hand_branch, create_face_branch, create_pose_branch
+    from components import create_hand_branch, create_face_branch, create_pose_branch
 
 
 def create_hybrid_multistream_model(num_classes, sequence_length):
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     test_input = np.random.rand(2, 33, 1662)
     test_output = model.predict(test_input, verbose=0)
     
-    print(f"\nTest passed ✓")
+    print(f"\nTest passed ")
     print(f"Input:  {test_input.shape}")
     print(f"Output: {test_output.shape}")
     print(f"Probabilities sum: {test_output[0].sum():.4f}")

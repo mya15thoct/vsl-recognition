@@ -55,8 +55,8 @@ else:
 print("="*70)
 print()
 
-from training.train import train_model
-from training.evaluate import evaluate_model
+from src.training.trainer import train_model
+from src.training.evaluator import evaluate_model
 
 
 def set_seed(seed=42):
