@@ -5,15 +5,15 @@ from pathlib import Path
 import numpy as np
 
 # ==================== PATHS ====================
-# Base directories
-BASE_DIR = Path(__file__).parent
-PROJECT_ROOT = BASE_DIR.parent
-DATA_DIR = PROJECT_ROOT / "data" / "INCLUDE"  # Changed to INCLUDE
+# Base directories - SERVER PATHS
+BASE_DIR = Path("/home/islabworker2/mya/vsl-recognition/src")
+PROJECT_ROOT = Path("/home/islabworker2/mya/vsl-recognition")
+DATA_DIR = Path("/mnt/ngan/vsl_data/VSL_data")
 
 # Data paths
-SEQUENCE_PATH = PROJECT_ROOT / "data" / "INCLUDE" / "sequences"  # INCLUDE sequences
-MODEL_PATH = BASE_DIR / "models"
-LOGS_PATH = BASE_DIR / "logs"
+SEQUENCE_PATH = DATA_DIR / "sequences"  # Save sequences alongside the data
+MODEL_PATH = PROJECT_ROOT / "checkpoints"
+LOGS_PATH = PROJECT_ROOT / "logs"
 
 # Create directories if they don't exist
 SEQUENCE_PATH.mkdir(parents=True, exist_ok=True)

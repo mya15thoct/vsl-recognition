@@ -3,9 +3,15 @@ data/qipedc_raw/
 *.zip
 *.tar.gz
 
-# Models
+# Models and Training
 sign_language_detection/models/
 sign_language_detection/logs/
+checkpoints/
+logs/
+
+# Processed data (sequences)
+sequences/
+data/*/sequences/
 
 # Python
 __pycache__/

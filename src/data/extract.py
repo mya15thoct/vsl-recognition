@@ -41,8 +41,11 @@ def extract_include_keypoints():
     for class_idx, class_name in enumerate(classes):
         class_path = DATA_DIR / class_name
         
-        #Get all .MOV videos
-        videos = list(class_path.glob('*.MOV'))
+        # Get all video files (.MOV and .MP4, case insensitive)
+        videos = (list(class_path.glob('*.MOV')) + 
+                 list(class_path.glob('*.mov')) +
+                 list(class_path.glob('*.MP4')) + 
+                 list(class_path.glob('*.mp4')))
         
         if not videos:
             print(f"[WARNING] No videos found in {class_name}")

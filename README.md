@@ -87,3 +87,58 @@ python -m src.inference.realtime --mode webcam
 ```bash
 pip install -r requirements.txt
 ```
+
+---
+
+## Server Deployment
+
+### Configuration
+
+The `config.py` is configured for server paths:
+- Data: `/mnt/ngan/vsl_data/VSL_data/`
+- Code: `/home/islabworker2/mya/vsl-recognition`
+- Sequences: `/mnt/ngan/vsl_data/VSL_data/sequences/`
+
+### Setup on Server
+
+```bash
+# 1. Clone/pull code
+cd /home/islabworker2/mya/vsl-recognition
+git pull
+
+# 2. Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Verify GPU
+python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+```
+
+### Training on Server
+
+```bash
+# Run training (foreground)
+python main.py train
+
+# Or with nohup (background)
+nohup python main.py train > training.log 2>&1 &
+tail -f training.log
+```
+
+### Monitor Training
+
+```bash
+# Check processes
+ps aux | grep "main.py"
+
+# Monitor GPU
+nvidia-smi
+
+# View logs
+tail -f training.log
+tail -f logs/training_*.log
+```
+
