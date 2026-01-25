@@ -8,7 +8,7 @@ import numpy as np
 # Base directories - SERVER PATHS
 BASE_DIR = Path("/home/islabworker2/mya/vsl-recognition/src")
 PROJECT_ROOT = Path("/home/islabworker2/mya/vsl-recognition")
-DATA_DIR = Path("/mnt/ngan/vsl_data/VSL_data")
+DATA_DIR = Path("/mnt/ngan/vsl_data")
 
 # Data paths
 SEQUENCE_PATH = DATA_DIR / "sequences"  # Save sequences alongside the data
