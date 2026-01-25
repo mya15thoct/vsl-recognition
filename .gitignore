@@ -8,10 +8,17 @@ sign_language_detection/models/
 sign_language_detection/logs/
 checkpoints/
 logs/
+*.h5
+*.hdf5
+*.keras
+best_model.h5
+final_model.h5
 
 # Processed data (sequences)
 sequences/
 data/*/sequences/
+*.npy
+*.npz
 
 # Python
 __pycache__/
