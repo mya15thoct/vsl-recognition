@@ -2,81 +2,43 @@
 Configuration file for Sign Language Action Detection
 """
 from pathlib import Path
-import numpy as np
 
 # ==================== PATHS ====================
-# Base directories - SERVER PATHS
-BASE_DIR = Path("/home/islabworker2/mya/vsl-recognition/src")
-PROJECT_ROOT = Path("/home/islabworker2/mya/vsl-recognition")
-DATA_DIR = Path("/mnt/ngan/vsl_data")
+DATA_DIR = Path("/mnt/ngan/vsl_data")          # Raw videos (read-only)
+RECOGNITION_DIR = Path("/mnt/ngan/recognition")  # All outputs go here
 
-# Data paths
-SEQUENCE_PATH = DATA_DIR / "sequences"  # Save sequences alongside the data
-MODEL_PATH = PROJECT_ROOT / "checkpoints"
-LOGS_PATH = PROJECT_ROOT / "logs"
+SEQUENCE_PATH  = RECOGNITION_DIR / "sequences"   # Extracted .npy sequences
+CHECKPOINT_DIR = RECOGNITION_DIR / "checkpoints" # Saved model weights
+LOGS_DIR       = RECOGNITION_DIR / "logs"        # Training logs / TensorBoard
 
 # Create directories if they don't exist
 SEQUENCE_PATH.mkdir(parents=True, exist_ok=True)
-MODEL_PATH.mkdir(parents=True, exist_ok=True)
-LOGS_PATH.mkdir(parents=True, exist_ok=True)
+CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==================== MEDIAPIPE SETTINGS ====================
 MP_MIN_DETECTION_CONFIDENCE = 0.5
 MP_MIN_TRACKING_CONFIDENCE = 0.5
 
 # ==================== DATA SETTINGS ====================
-# Variable sequence length - extract all frames from videos
-SEQUENCE_LENGTH = None  # No fixed length - save all frames
-MAX_SEQUENCE_LENGTH = 200  # Maximum length for padding (will be auto-detected if None)
-PADDING_VALUE = 0.0  # Value to use for padding shorter sequences
-
-# Number of sequences from each video
-NO_SEQUENCES = 1  # INCLUDE: 1 sequence per video (no augmentation needed)
-# Trim frames at start/end (preparation and ending movements)
-TRIM_START_FRAMES = 0  # INCLUDE videos are pre-trimmed
-TRIM_END_FRAMES = 0
-
-# Actions to detect (will be populated from data folder)
-ACTIONS = np.array([])  # Will be set dynamically from class folders
-
-# ==================== MODEL SETTINGS ====================
-# Model architecture
-LSTM_UNITS = [64, 128, 64]
-DENSE_UNITS = [64, 32]
-
-# Training parameters
-EPOCHS = 2000
-BATCH_SIZE = 32
-LEARNING_RATE = 0.001
+SEQUENCE_LENGTH = None  # No fixed length - use all frames, pad at load time
 
 # ==================== KEYPOINT DIMENSIONS ====================
-# MediaPipe outputs
-POSE_LANDMARKS = 33 * 4  # 33 landmarks × (x, y, z, visibility) = 132
-FACE_LANDMARKS = 468 * 3  # 468 landmarks × (x, y, z) = 1404  
-HAND_LANDMARKS = 21 * 3   # 21 landmarks × (x, y, z) per hand = 63
+POSE_LANDMARKS = 33 * 4   # 33 landmarks × (x, y, z, visibility) = 132
+FACE_LANDMARKS = 468 * 3  # 468 landmarks × (x, y, z)             = 1404
+HAND_LANDMARKS = 21 * 3   # 21 landmarks  × (x, y, z) per hand    = 63
 
 TOTAL_KEYPOINTS = POSE_LANDMARKS + FACE_LANDMARKS + (HAND_LANDMARKS * 2)  # 1662
 
 # ==================== COLORS FOR VISUALIZATION ====================
 COLORS = {
-    'face': ((0, 255, 0), (0, 200, 0)),           # Bright green (face)
-    'pose': ((0, 0, 255), (0, 0, 200)),           # Bright red (pose/body)
-    'left_hand': ((255, 0, 0), (200, 0, 0)),      # Bright blue (left hand)
-    'right_hand': ((255, 0, 255), (200, 0, 200))  # Bright magenta (right hand)
+    'face':       ((0, 255, 0),   (0, 200, 0)),
+    'pose':       ((0, 0, 255),   (0, 0, 200)),
+    'left_hand':  ((255, 0, 0),   (200, 0, 0)),
+    'right_hand': ((255, 0, 255), (200, 0, 200))
 }
 
-# ==================== MODEL & TRAINING CONFIG ====================
-# Model architecture
-MODEL_CONFIG = {
-    'cnn_filters': [64, 128, 256],
-    'cnn_dropout': 0.2,
-    'lstm_units': [128, 64],
-    'lstm_dropout': 0.3,
-    'dense_units': 128,
-    'dense_dropout': 0.5
-}
-
-# Training hyperparameters
+# ==================== TRAINING CONFIG ====================
 TRAINING_CONFIG = {
     'batch_size': 32,
     'epochs': 100,
@@ -87,8 +49,4 @@ TRAINING_CONFIG = {
     'val_split': 0.15,
     'test_split': 0.15
 }
-
-# Paths
-CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
-LOGS_DIR = PROJECT_ROOT / "logs"
 

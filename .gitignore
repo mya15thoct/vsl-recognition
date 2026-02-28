@@ -1,5 +1,5 @@
-# Data
-data/qipedc_raw/
+# Data (raw videos - do not track)
+data/
 *.zip
 *.tar.gz
 

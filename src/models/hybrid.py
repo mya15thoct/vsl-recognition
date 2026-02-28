@@ -1,7 +1,7 @@
 """
-Hybrid MLP+LSTM Model for Sign Language Recognition
+Hybrid MLP+Bidirectional LSTM Model for Sign Language Recognition
 - MLP (Dense) branches for feature extraction from each body part
-- LSTM layers for temporal modeling
+- Bidirectional LSTM layers for temporal modeling (forward + backward)
 - Multi-stream architecture with specialized branches
 """
 import tensorflow as tf
@@ -73,10 +73,12 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     )(x)
     x = layers.Dropout(0.3)(x)
     
-    # === TEMPORAL MODELING (LSTM) ===
-    x = layers.LSTM(128, return_sequences=True, name='lstm1')(x)
+    # === TEMPORAL MODELING (Bidirectional LSTM) ===
+    # Each LSTM uses half the units; forward+backward concatenated = same output dim
+    # lstm1: 64×2 = 128 dims, lstm2: 32×2 = 64 dims
+    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True), name='bilstm1')(x)
     x = layers.Dropout(0.3)(x)
-    x = layers.LSTM(64, return_sequences=False, name='lstm2')(x)
+    x = layers.Bidirectional(layers.LSTM(32, return_sequences=False), name='bilstm2')(x)
     x = layers.Dropout(0.3)(x)
     
     # === CLASSIFICATION HEAD ===
@@ -84,7 +86,7 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
     
-    model = Model(inputs=inputs, outputs=outputs, name='MLP_LSTM_Model')
+    model = Model(inputs=inputs, outputs=outputs, name='MLP_BiLSTM_Model')
     return model
 
 
@@ -100,7 +102,7 @@ if __name__ == "__main__":
     print("  Shared Dense Layers:")
     print("    - 2 layers for cross-part interaction learning")
     print("  Temporal Modeling:")
-    print("    - 2 LSTM layers (128 → 64)")
+    print("    - 2 Bidirectional LSTM layers (64×2=128 → 32×2=64)")
     print()
     
     model = create_hybrid_multistream_model(num_classes=76, sequence_length=33)

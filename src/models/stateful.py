@@ -1,6 +1,7 @@
 """
-Stateful variant of MLP+LSTM model for variable-length sequence inference.
-This model processes sequences frame-by-frame while maintaining LSTM state.
+Stateful variant of MLP+Bidirectional LSTM model for variable-length sequence inference.
+Uses Bidirectional LSTM with stateful=True — both forward and backward directions
+maintain state across calls, matching the training model architecture.
 """
 import tensorflow as tf
 from tensorflow.keras import layers, Model
@@ -67,10 +68,11 @@ def create_stateful_model(num_classes, timesteps=1):
     )(x)
     x = layers.Dropout(0.3)(x)
     
-    # === STATEFUL LSTM LAYERS ===
-    x = layers.LSTM(128, return_sequences=True, stateful=True, name='lstm1')(x)
+    # === STATEFUL Bidirectional LSTM LAYERS ===
+    # Matches hybrid.py: 64×2=128 dims, 32×2=64 dims
+    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True, stateful=True), name='bilstm1')(x)
     x = layers.Dropout(0.3)(x)
-    x = layers.LSTM(64, return_sequences=False, stateful=True, name='lstm2')(x)
+    x = layers.Bidirectional(layers.LSTM(32, return_sequences=False, stateful=True), name='bilstm2')(x)
     x = layers.Dropout(0.3)(x)
     
     # === CLASSIFICATION HEAD ===
@@ -78,7 +80,7 @@ def create_stateful_model(num_classes, timesteps=1):
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
     
-    model = Model(inputs=inputs, outputs=outputs, name='Stateful_MLP_LSTM_Model')
+    model = Model(inputs=inputs, outputs=outputs, name='Stateful_MLP_BiLSTM_Model')
     return model
 
 
