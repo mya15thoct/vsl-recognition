@@ -120,9 +120,10 @@ def train_model():
     
     callbacks = [
         ModelCheckpoint(
-            filepath=str(CHECKPOINT_DIR / 'best_model.keras'),
+            filepath=str(CHECKPOINT_DIR / 'best_model'),
             monitor='val_accuracy',
             save_best_only=True,
+            save_format='tf',
             verbose=1
         ),
         EarlyStopping(
@@ -179,7 +180,7 @@ def train_model():
     print(f"\nTest Accuracy: {test_acc*100:.2f}%")
     
     # 8. Save final model
-    model.save(str(CHECKPOINT_DIR / 'final_model.keras'))
+    model.save(str(CHECKPOINT_DIR / 'final_model'), save_format='tf')
     
     # 9. Save action mapping
     mapping = {i: name for i, name in enumerate(action_names)}
@@ -187,7 +188,7 @@ def train_model():
         json.dump(mapping, f, indent=2)
     
     print(f"\nTraining complete")
-    print(f"   Best model: {CHECKPOINT_DIR / 'best_model.keras'}")
+    print(f"   Best model: {CHECKPOINT_DIR / 'best_model'}")
     print(f"   TensorBoard: tensorboard --logdir={LOGS_DIR}")
     
     return history, test_acc
