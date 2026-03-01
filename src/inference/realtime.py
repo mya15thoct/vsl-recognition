@@ -27,7 +27,7 @@ INFERENCE_SEQUENCE_LENGTH = SEQUENCE_LENGTH if SEQUENCE_LENGTH is not None else 
 def load_model_and_actions(model_path=None, mapping_path=None):
     """Load trained model and action mapping"""
     if model_path is None:
-        model_path = CHECKPOINT_DIR / 'best_model.h5'
+        model_path = CHECKPOINT_DIR / 'best_model.keras'
     if mapping_path is None:
         mapping_path = CHECKPOINT_DIR / 'action_mapping.json'
     
@@ -314,7 +314,7 @@ if __name__ == "__main__":
                        help='Inference mode: webcam or video')
     parser.add_argument('--video', type=str, help='Path to input video (for video mode)')
     parser.add_argument('--output', type=str, help='Path to output video (optional)')
-    parser.add_argument('--model', type=str, help='Path to model file (default: checkpoints/best_model.h5)')
+    parser.add_argument('--model', type=str, help='Path to model file (default: checkpoints/best_model.keras)')
     parser.add_argument('--threshold', type=float, default=0.7, 
                        help='Confidence threshold (default: 0.7)')
     

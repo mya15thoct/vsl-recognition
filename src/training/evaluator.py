@@ -23,7 +23,7 @@ def evaluate_model(model_path=None):
     """
     # Load best model
     if model_path is None:
-        model_path = CHECKPOINT_DIR / 'best_model.h5'
+        model_path = CHECKPOINT_DIR / 'best_model.keras'
     
     print(f"Loading model: {model_path}")
     print(f"Model path exists: {Path(model_path).exists()}")
