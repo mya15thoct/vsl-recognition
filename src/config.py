@@ -41,10 +41,10 @@ COLORS = {
 # ==================== TRAINING CONFIG ====================
 TRAINING_CONFIG = {
     'batch_size': 32,
-    'epochs': 100,
+    'epochs': 500,
     'learning_rate': 0.001,
-    'early_stopping_patience': 15,
-    'reduce_lr_patience': 7,
+    'early_stopping_patience': 40,
+    'reduce_lr_patience': 15,
     'train_split': 0.7,
     'val_split': 0.15,
     'test_split': 0.15
