@@ -9,11 +9,12 @@ import numpy as np
 BASE_DIR = Path("/home/islabworker2/mya/vsl-recognition/src")
 PROJECT_ROOT = Path("/home/islabworker2/mya/vsl-recognition")
 DATA_DIR = Path("/mnt/ngan/vsl_data")
+RECOGNITION_DIR = Path("/mnt/ngan/recognition")
 
 # Data paths
-SEQUENCE_PATH = DATA_DIR / "sequences"  # Save sequences alongside the data
-MODEL_PATH = PROJECT_ROOT / "checkpoints"
-LOGS_PATH = PROJECT_ROOT / "logs"
+SEQUENCE_PATH = RECOGNITION_DIR / "sequences"
+MODEL_PATH = RECOGNITION_DIR / "checkpoints"
+LOGS_PATH = RECOGNITION_DIR / "logs"
 
 # Create directories if they don't exist
 SEQUENCE_PATH.mkdir(parents=True, exist_ok=True)
@@ -89,6 +90,6 @@ TRAINING_CONFIG = {
 }
 
 # Paths
-CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
-LOGS_DIR = PROJECT_ROOT / "logs"
+CHECKPOINT_DIR = RECOGNITION_DIR / "checkpoints"
+LOGS_DIR = RECOGNITION_DIR / "logs"
 
