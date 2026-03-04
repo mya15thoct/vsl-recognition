@@ -47,8 +47,8 @@ def evaluate_model(model_path=None):
     
     # Load data with target sequence length matching the model
     print("\nLoading test data...")
-    X, y, action_names = load_sequences(target_length=expected_seq_length)
-    _, _, X_test, _, _, y_test = split_data(X, y)
+    X, y, action_names, is_original = load_sequences(target_length=expected_seq_length)
+    _, _, X_test, _, _, y_test = split_data(X, y, is_original=is_original)
     
     # Verify shapes match
     print(f"\nShape verification:")

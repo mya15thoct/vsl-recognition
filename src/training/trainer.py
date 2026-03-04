@@ -59,15 +59,16 @@ def train_model():
     
     # 1. Load data
     print("\n[1/5] Loading data...")
-    X, y, action_names = load_sequences()  # Load ALL sequences
+    X, y, action_names, is_original = load_sequences()  # Load ALL sequences
     num_classes = len(action_names)
     
-    # 2. Split data
+    # 2. Split data (pass is_original to prevent augmented data leaking into val/test)
     print("\n[2/5] Splitting data...")
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(
         X, y,
         train_size=TRAINING_CONFIG['train_split'],
-        val_size=TRAINING_CONFIG['val_split']
+        val_size=TRAINING_CONFIG['val_split'],
+        is_original=is_original
     )
     
     # 3. Create datasets
