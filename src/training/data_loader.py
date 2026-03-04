@@ -57,8 +57,10 @@ def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None, t
         max_length = target_length
         print(f"\n  Using target sequence length: {max_length} frames")
     else:
-        max_length = max(sequence_lengths)
-        print(f"\n  Auto-detected max sequence length: {max_length} frames")
+        # Use 95th percentile instead of max to reduce noise from extreme outliers
+        max_length = int(np.percentile(sequence_lengths, 95))
+        print(f"\n  Auto-detected 95th percentile sequence length: {max_length} frames")
+        print(f"  (max was {max(sequence_lengths)}, using 95th pct to reduce zero-padding)")
     
     print(f"  Sequence length stats:")
     print(f"    Min: {min(sequence_lengths)} frames")

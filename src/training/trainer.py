@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import json
 
+import numpy as np
 sys.path.append(str(Path(__file__).parent.parent))
 
 from training.data_loader import load_sequences, split_data, create_tf_dataset
@@ -86,7 +87,7 @@ def train_model():
     print("  → Creating model architecture...")
     
     # Get sequence length from data shape
-    sequence_length = X_train.shape[1]  # Should be 33 for INCLUDE
+    sequence_length = X_train.shape[1]
     keypoint_dim = X_train.shape[2]      # Should be 1662
     
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
@@ -104,7 +105,7 @@ def train_model():
     print(" Compiling model...")
     model.compile(
         optimizer=Adam(learning_rate=TRAINING_CONFIG['learning_rate']),
-        loss='categorical_crossentropy',
+        loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
         metrics=['accuracy']
     )
     print("Model compiled")
@@ -157,6 +158,16 @@ def train_model():
     import sys
     sys.stdout.flush()  # Force flush before model.fit
     
+    # Compute class weights to handle imbalance
+    from sklearn.utils.class_weight import compute_class_weight
+    class_weights_array = compute_class_weight(
+        class_weight='balanced',
+        classes=np.unique(y_train),
+        y=y_train
+    )
+    class_weight_dict = dict(enumerate(class_weights_array))
+    print(f"Class weights computed: min={min(class_weights_array):.3f}, max={max(class_weights_array):.3f}")
+
     print("[DEBUG] About to call model.fit()...")
     sys.stdout.flush()
     
@@ -165,6 +176,7 @@ def train_model():
         validation_data=val_ds,
         epochs=TRAINING_CONFIG['epochs'],
         callbacks=callbacks,
+        class_weight=class_weight_dict,
         verbose=1
     )
     

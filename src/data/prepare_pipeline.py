@@ -16,8 +16,8 @@ print("="*70 + "\n")
 # STEP 1: Extract keypoints from videos
 print("STEP 1/3: Extracting keypoints from videos...")
 print("-" * 70)
-from src.data.extract import extract_include_keypoints
-extract_include_keypoints()
+from src.data.extract import extract_keypoints_from_videos
+extract_keypoints_from_videos()
 
 # STEP 2: Check data distribution
 print("\n\nSTEP 2/3: Checking data distribution...")
@@ -33,10 +33,10 @@ from src.data.augment import augment_dataset
 # Calculate smart target based on data
 import numpy as np
 median_samples = int(np.median(all_sequences))
-target_samples = max(15, median_samples)  # At least 15, or median
+target_samples = max(30, median_samples)  # At least 30 samples per class
 
 print(f"\nAuto-selected target: {target_samples} samples per class")
-print("(Based on median samples per class)\n")
+print("(Based on median samples per class, minimum 30)\n")
 
 augment_dataset(
     target_samples_per_class=target_samples,
