@@ -1,6 +1,5 @@
 """
-Extract keypoints from INCLUDE dataset (.MOV videos)
-Adapted from extract_keypoints.py for INCLUDE format
+Extract keypoints from sign language videos
 """
 import cv2
 import numpy as np
@@ -13,12 +12,12 @@ sys.path.append(str(Path(__file__).parent.parent))
 from config import DATA_DIR, SEQUENCE_PATH, SEQUENCE_LENGTH
 from src.utils.extraction import mediapipe_detection, extract_keypoints, get_holistic_model
 
-def extract_include_keypoints():
+def extract_keypoints_from_videos():
     """
-    Extract keypoints from INCLUDE .MOV videos
+    Extract keypoints from sign language videos
     """
     print("="*60)
-    print("EXTRACTING KEYPOINTS FROM INCLUDE DATASET")
+    print("EXTRACTING KEYPOINTS FROM DATASET")
     print("="*60)
     
     # Get all class folders
@@ -100,4 +99,4 @@ def extract_include_keypoints():
     print(f"{'='*60}")
 
 if __name__ == "__main__":
-    extract_include_keypoints()
+    extract_keypoints_from_videos()
