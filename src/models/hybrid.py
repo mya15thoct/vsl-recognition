@@ -1,8 +1,10 @@
 """
-Hybrid MLP+Bidirectional LSTM Model for Sign Language Recognition
-- MLP (Dense) branches for feature extraction from each body part
-- Bidirectional LSTM layers for temporal modeling (forward + backward)
-- Multi-stream architecture with specialized branches
+Hybrid MLP + Bidirectional LSTM Model with:
+  - Adaptive Body-Part Gating: learns dynamic per-frame importance weights
+    for each body part (pose/face/hand) instead of hardcoded fusion
+  - Temporal Attention: learns which frames matter most for classification
+    (extends the Masking layer idea to non-padding frames)
+  - Multi-stream MLP branches with varying depth per body part
 """
 import tensorflow as tf
 from tensorflow.keras import layers, Model
@@ -16,77 +18,103 @@ except ImportError:
 
 def create_hybrid_multistream_model(num_classes, sequence_length):
     """
-    Hybrid MLP+LSTM architecture:
-    1. MLP (Dense) branches for feature extraction (varying depth based on importance)
-    2. Feature fusion across body parts
-    3. Shared Dense layers for cross-part interaction learning
-    4. LSTM layers for temporal modeling
-    
+    Hybrid MLP + BiLSTM with Adaptive Body-Part Gating + Temporal Attention.
+
+    Architecture:
+      1. MLP branches  : per-body-part feature extraction (pose/face/hand)
+      2. Body-Part Gate: softmax gate that weights each part's contribution
+                         dynamically per frame (learned, not hardcoded)
+      3. Shared layers : cross-part interaction
+      4. BiLSTM ×2     : temporal modeling (forward + backward)
+      5. Temporal Attn : weighted sum over frames (learns which frames matter)
+      6. Head          : Dense → softmax
+
     Args:
-        num_classes: Number of action classes
-        sequence_length: Frames per sequence
-    
+        num_classes:     Number of action classes
+        sequence_length: Frames per sequence (after padding)
+
     Returns:
         Keras Model
     """
-    # === INPUT LAYER ===
+    # === INPUT ===
     inputs = layers.Input(shape=(sequence_length, 1662), name='sequence_input')
     x = layers.Masking(mask_value=0.0)(inputs)
-    
+
     # === SPLIT KEYPOINTS ===
-    # Pose: 0:132 (33 × 4)
-    # Face: 132:1536 (468 × 3) 
-    # Hands: 1536:1662 (21×2 × 3)
-    pose_keypoints = layers.Lambda(lambda x: x[:, :, :132], name='pose_split')(x)
-    face_keypoints = layers.Lambda(lambda x: x[:, :, 132:1536], name='face_split')(x)
-    hand_keypoints = layers.Lambda(lambda x: x[:, :, 1536:], name='hand_split')(x)
-    
-    # === MLP BRANCHES (varying depth) ===
-    pose_branch = create_pose_branch(132, 'pose')     # 2 Dense layers (shallow)
-    face_branch = create_face_branch(1404, 'face')    # 4 Dense layers (deep)
-    hand_branch = create_hand_branch(126, 'hand')     # 3 Dense layers (deep)
-    
-    # Apply MLP to each frame
-    pose_features = layers.TimeDistributed(pose_branch, name='pose_features')(pose_keypoints)
-    face_features = layers.TimeDistributed(face_branch, name='face_features')(face_keypoints)
-    hand_features = layers.TimeDistributed(hand_branch, name='hand_features')(hand_keypoints)
-    
-    # === FEATURE FUSION ===
-    # Concatenate: (64 + 128 + 64) = 256 dimensions
-    merged = layers.Concatenate(name='feature_fusion')([
-        pose_features, 
-        face_features, 
-        hand_features
-    ])
-    
-    # === SHARED LAYERS (learn cross-part interactions) ===
-    # These layers see all parts together and learn their relationships
+    # Pose:  indices   0:132  (33 landmarks × 4)
+    # Face:  indices 132:1536 (468 landmarks × 3)
+    # Hands: indices 1536:    (21×2 landmarks × 3)
+    pose_keypoints = layers.Lambda(lambda t: t[:, :, :132],    name='pose_split')(x)
+    face_keypoints = layers.Lambda(lambda t: t[:, :, 132:1536], name='face_split')(x)
+    hand_keypoints = layers.Lambda(lambda t: t[:, :, 1536:],   name='hand_split')(x)
+
+    # === MLP BRANCHES ===
+    pose_branch = create_pose_branch(132,  'pose')   # shallow → 64 dims
+    face_branch = create_face_branch(1404, 'face')   # deep    → 128 dims
+    hand_branch = create_hand_branch(126,  'hand')   # deep    → 64 dims
+
+    pose_features = layers.TimeDistributed(pose_branch, name='pose_features')(pose_keypoints)  # (B,T,64)
+    face_features = layers.TimeDistributed(face_branch, name='face_features')(face_keypoints)  # (B,T,128)
+    hand_features = layers.TimeDistributed(hand_branch, name='hand_features')(hand_keypoints)  # (B,T,64)
+
+    # === ADAPTIVE BODY-PART GATING ===
+    # Concatenate all part features → compute 3 gate weights per frame
+    # gate[i] ∈ (0,1) and sum(gate) = 1  (softmax)
+    # This lets the model learn: "for THIS sign, hand matters more than face"
+    gate_input = layers.Concatenate(name='gate_input')([pose_features, face_features, hand_features])  # (B,T,256)
+    gate = layers.TimeDistributed(
+        layers.Dense(3, activation='softmax', name='gate_dense'),
+        name='body_part_gate'
+    )(gate_input)  # (B,T,3)
+
+    # Extract per-part gate scalars and broadcast-multiply
+    pose_scale = layers.Lambda(lambda g: g[:, :, 0:1], name='pose_gate')(gate)   # (B,T,1)
+    face_scale = layers.Lambda(lambda g: g[:, :, 1:2], name='face_gate')(gate)   # (B,T,1)
+    hand_scale = layers.Lambda(lambda g: g[:, :, 2:3], name='hand_gate')(gate)   # (B,T,1)
+
+    pose_gated = layers.Multiply(name='pose_gated')([pose_features, pose_scale])  # (B,T,64)
+    face_gated = layers.Multiply(name='face_gated')([face_features, face_scale])  # (B,T,128)
+    hand_gated = layers.Multiply(name='hand_gated')([hand_features, hand_scale])  # (B,T,64)
+
+    merged = layers.Concatenate(name='feature_fusion')([pose_gated, face_gated, hand_gated])  # (B,T,256)
+
+    # === SHARED LAYERS (cross-part interaction) ===
     x = layers.TimeDistributed(
-        layers.Dense(256, activation='relu', name='shared_interaction1'),
-        name='shared_td1'
+        layers.Dense(256, activation='relu', name='shared1'), name='shared_td1'
     )(merged)
     x = layers.Dropout(0.3)(x)
-    
+
     x = layers.TimeDistributed(
-        layers.Dense(128, activation='relu', name='shared_interaction2'),
-        name='shared_td2'
+        layers.Dense(128, activation='relu', name='shared2'), name='shared_td2'
     )(x)
     x = layers.Dropout(0.3)(x)
-    
-    # === TEMPORAL MODELING (Bidirectional LSTM) ===
-    # Each LSTM uses half the units; forward+backward concatenated = same output dim
-    # lstm1: 64×2 = 128 dims, lstm2: 32×2 = 64 dims
-    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True), name='bilstm1')(x)
+
+    # === BIDIRECTIONAL LSTM ===
+    # bilstm1: 64×2 = 128 dims,  bilstm2: 32×2 = 64 dims
+    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True),  name='bilstm1')(x)
     x = layers.Dropout(0.3)(x)
-    x = layers.Bidirectional(layers.LSTM(32, return_sequences=False), name='bilstm2')(x)
+    x = layers.Bidirectional(layers.LSTM(32, return_sequences=True),  name='bilstm2')(x)  # keep sequences for attention
     x = layers.Dropout(0.3)(x)
-    
+
+    # === TEMPORAL ATTENTION ===
+    # Extends Masking: not just ignoring zeros, but weighting real frames by importance.
+    # attn_scores: tanh score per frame → softmax over time → weighted sum
+    attn_scores  = layers.TimeDistributed(
+        layers.Dense(1, activation='tanh', name='attn_score'), name='attn_td'
+    )(x)                                                                          # (B,T,1)
+    attn_weights = layers.Softmax(axis=1, name='temporal_attention')(attn_scores) # (B,T,1)
+    context      = layers.Multiply(name='attn_apply')([x, attn_weights])          # (B,T,64)
+    context      = layers.Lambda(
+        lambda t: tf.reduce_sum(t, axis=1), name='context_vector'
+    )(context)                                                                     # (B,64)
+
     # === CLASSIFICATION HEAD ===
-    x = layers.Dense(128, activation='relu', name='dense1')(x)
+    x = layers.Dense(128, activation='relu', name='dense1')(context)
     x = layers.Dropout(0.5)(x)
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
-    
-    model = Model(inputs=inputs, outputs=outputs, name='MLP_BiLSTM_Model')
+
+    model = Model(inputs=inputs, outputs=outputs,
+                  name='MLP_BiLSTM_Gated_Attention_Model')
     return model
 
 
