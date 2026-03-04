@@ -140,6 +140,48 @@ def random_temporal_crop(sequence: np.ndarray, crop_ratio: float = 0.9) -> np.nd
     return cropped
 
 
+def spatial_jitter(sequence: np.ndarray, jitter_std: float = 0.02) -> np.ndarray:
+    """
+    Add small random spatial offset to all x, y coordinates each frame.
+    Simulates the signer standing slightly off-center or camera angle variation.
+    
+    Pose format:  stride 4 (x, y, z, vis) → offset indices 0::4 and 1::4
+    Face/Hand format: stride 3 (x, y, z)  → offset indices 0::3 and 1::3
+    
+    Args:
+        sequence: (num_frames, 1662) array - normalized keypoints
+        jitter_std: Std of per-frame Gaussian jitter (default 0.02 ≈ 2% shoulder width)
+    
+    Returns:
+        Jittered sequence (same shape)
+    """
+    seq = sequence.copy()
+    num_frames = len(seq)
+ 
+    # Pose: indices 0:132, stride 4
+    # Face: indices 132:1536, stride 3
+    # Hands: indices 1536:1662, stride 3
+    for frame_idx in range(num_frames):
+        # Skip zero-padded frames
+        if np.all(seq[frame_idx] == 0):
+            continue
+
+        dx = np.random.normal(0, jitter_std)
+        dy = np.random.normal(0, jitter_std)
+
+        # Pose (stride 4)
+        seq[frame_idx, 0:132:4] += dx
+        seq[frame_idx, 1:132:4] += dy
+        # Face (stride 3)
+        seq[frame_idx, 132:1536:3] += dx
+        seq[frame_idx, 133:1536:3] += dy
+        # Hands (stride 3)
+        seq[frame_idx, 1536::3] += dx
+        seq[frame_idx, 1537::3] += dy
+
+    return seq.astype(np.float32)
+
+
 def augment_sequence(sequence: np.ndarray, 
                      method: str = 'reverse',
                      **kwargs) -> np.ndarray:
@@ -168,10 +210,13 @@ def augment_sequence(sequence: np.ndarray,
     elif method == 'crop':
         crop_ratio = kwargs.get('crop_ratio', 0.9)
         return random_temporal_crop(sequence, crop_ratio)
+    elif method == 'jitter':
+        jitter_std = kwargs.get('jitter_std', 0.02)
+        return spatial_jitter(sequence, jitter_std)
     else:
         raise ValueError(f"Unknown augmentation method: {method}")
 
 
 def get_augmentation_methods() -> list:
     """Get list of available augmentation methods"""
-    return ['reverse', 'subsample', 'noise', 'scale', 'crop']
+    return ['reverse', 'subsample', 'noise', 'scale', 'crop', 'jitter']

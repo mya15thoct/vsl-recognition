@@ -40,7 +40,7 @@ print("(Based on median samples per class, minimum 30)\n")
 
 augment_dataset(
     target_samples_per_class=target_samples,
-    augmentation_methods=['noise', 'subsample', 'scale'],
+    augmentation_methods=['noise', 'subsample', 'scale', 'jitter'],
     output_suffix='_aug',
     dry_run=False
 )
