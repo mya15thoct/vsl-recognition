@@ -4,6 +4,8 @@ Utility functions for keypoint extraction using MediaPipe
 import cv2
 import numpy as np
 import mediapipe as mp
+from mediapipe.python.solutions import holistic as mp_holistic_module
+from mediapipe.python.solutions import drawing_utils as mp_drawing
 import sys
 from pathlib import Path
 
@@ -12,9 +14,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from config import MP_MIN_DETECTION_CONFIDENCE, MP_MIN_TRACKING_CONFIDENCE
 
-# Initialize MediaPipe
-mp_holistic = mp.solutions.holistic
-mp_drawing = mp.solutions.drawing_utils
+# MediaPipe Holistic module
+mp_holistic = mp_holistic_module
 
 
 def mediapipe_detection(image, model):
