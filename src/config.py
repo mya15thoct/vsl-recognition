@@ -1,6 +1,7 @@
 """
 Configuration file for Sign Language Action Detection
 """
+import os
 from pathlib import Path
 
 # ==================== PATHS ====================
@@ -8,13 +9,9 @@ DATA_DIR = Path("/mnt/ngan/vsl_data")          # Raw videos (read-only)
 RECOGNITION_DIR = Path("/mnt/ngan/recognition")  # All outputs go here
 
 SEQUENCE_PATH  = RECOGNITION_DIR / "sequences"   # Extracted .npy sequences
-CHECKPOINT_DIR = RECOGNITION_DIR / "checkpoints" # Saved model weights
-LOGS_DIR       = RECOGNITION_DIR / "logs"        # Training logs / TensorBoard
 
-# Create directories if they don't exist
+# Create sequences directory
 SEQUENCE_PATH.mkdir(parents=True, exist_ok=True)
-CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==================== MEDIAPIPE SETTINGS ====================
 MP_MIN_DETECTION_CONFIDENCE = 0.5
@@ -41,7 +38,14 @@ COLORS = {
 # ==================== MODEL SELECTION ====================
 # 'mlp'         → MLP branches + Cross-Part Gating + BiLSTM + Attention (hybrid.py)
 # 'transformer' → Transformer Encoder branches + same downstream (transformer/model.py)
-MODEL_TYPE = 'mlp'
+# Override via environment variable: MODEL_TYPE=transformer python main.py train
+MODEL_TYPE = os.environ.get('MODEL_TYPE', 'mlp')
+
+# Separate checkpoint/log dirs per model type to avoid overwriting
+CHECKPOINT_DIR = RECOGNITION_DIR / 'checkpoints' / MODEL_TYPE
+LOGS_DIR       = RECOGNITION_DIR / 'logs'        / MODEL_TYPE
+CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==================== TRAINING CONFIG ====================
 TRAINING_CONFIG = {
