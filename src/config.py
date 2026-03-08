@@ -38,6 +38,11 @@ COLORS = {
     'right_hand': ((255, 0, 255), (200, 0, 200))
 }
 
+# ==================== MODEL SELECTION ====================
+# 'mlp'         → MLP branches + Cross-Part Gating + BiLSTM + Attention (hybrid.py)
+# 'transformer' → Transformer Encoder branches + same downstream (transformer/model.py)
+MODEL_TYPE = 'mlp'
+
 # ==================== TRAINING CONFIG ====================
 TRAINING_CONFIG = {
     'batch_size': 32,

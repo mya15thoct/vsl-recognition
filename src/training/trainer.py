@@ -93,14 +93,21 @@ def train_model():
     
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
-    # Use MLP + LSTM hybrid model
-    from models.hybrid import create_hybrid_multistream_model
-    print("  → Using MLP + LSTM Hybrid architecture")
-    
-    model = create_hybrid_multistream_model(
-        num_classes=num_classes,
-        sequence_length=sequence_length
-    )
+    from config import MODEL_TYPE
+    if MODEL_TYPE == 'transformer':
+        from models.transformer.model import create_hybrid_transformer_model
+        print("  → Using Transformer Encoder + BiLSTM architecture")
+        model = create_hybrid_transformer_model(
+            num_classes=num_classes,
+            sequence_length=sequence_length
+        )
+    else:
+        from models.hybrid import create_hybrid_multistream_model
+        print("  → Using MLP + BiLSTM Hybrid architecture")
+        model = create_hybrid_multistream_model(
+            num_classes=num_classes,
+            sequence_length=sequence_length
+        )
     print("  Model architecture created")
     
     print(" Compiling model...")

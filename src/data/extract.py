@@ -10,7 +10,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from config import DATA_DIR, SEQUENCE_PATH, SEQUENCE_LENGTH
-from src.utils.extraction import mediapipe_detection, extract_keypoints, get_holistic_model
+from utils.extraction import mediapipe_detection, extract_keypoints, get_holistic_model
 
 def extract_keypoints_from_videos():
     """

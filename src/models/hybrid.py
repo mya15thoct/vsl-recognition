@@ -57,11 +57,31 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     face_features = layers.TimeDistributed(face_branch, name='face_features')(face_keypoints)  # (B,T,128)
     hand_features = layers.TimeDistributed(hand_branch, name='hand_features')(hand_keypoints)  # (B,T,64)
 
-    # === ADAPTIVE BODY-PART GATING ===
-    # Concatenate all part features → compute 3 gate weights per frame
-    # gate[i] ∈ (0,1) and sum(gate) = 1  (softmax)
-    # This lets the model learn: "for THIS sign, hand matters more than face"
-    gate_input = layers.Concatenate(name='gate_input')([pose_features, face_features, hand_features])  # (B,T,256)
+    # === CROSS-PART CONTEXTUAL GATING ===
+    # Each part first "asks" the other two parts for context before computing
+    # its gate weight. This allows cross-part interaction before gating.
+    # pose_ctx = f(face, hand): pose learns what the other parts are doing
+    pose_ctx = layers.TimeDistributed(
+        layers.Dense(64, activation='relu', name='pose_ctx_dense'),
+        name='pose_ctx'
+    )(layers.Concatenate(name='pose_ctx_input')([face_features, hand_features]))   # (B,T,64)
+
+    face_ctx = layers.TimeDistributed(
+        layers.Dense(64, activation='relu', name='face_ctx_dense'),
+        name='face_ctx'
+    )(layers.Concatenate(name='face_ctx_input')([pose_features, hand_features]))   # (B,T,64)
+
+    hand_ctx = layers.TimeDistributed(
+        layers.Dense(64, activation='relu', name='hand_ctx_dense'),
+        name='hand_ctx'
+    )(layers.Concatenate(name='hand_ctx_input')([pose_features, face_features]))   # (B,T,64)
+
+    # Enrich each part with cross-part context before computing gate weights
+    pose_enriched = layers.Concatenate(name='pose_enriched')([pose_features, pose_ctx])  # (B,T,128)
+    face_enriched = layers.Concatenate(name='face_enriched')([face_features, face_ctx])  # (B,T,192)
+    hand_enriched = layers.Concatenate(name='hand_enriched')([hand_features, hand_ctx])  # (B,T,128)
+
+    gate_input = layers.Concatenate(name='gate_input')([pose_enriched, face_enriched, hand_enriched])  # (B,T,448)
     gate = layers.TimeDistributed(
         layers.Dense(3, activation='softmax', name='gate_dense'),
         name='body_part_gate'
@@ -114,7 +134,7 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
 
     model = Model(inputs=inputs, outputs=outputs,
-                  name='MLP_BiLSTM_Gated_Attention_Model')
+                  name='MLP_BiLSTM_CrossPartGating_Attention_Model')
     return model
 
 
