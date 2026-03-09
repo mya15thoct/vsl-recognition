@@ -85,14 +85,19 @@ def train_model():
     print("Creating test dataset...")
     test_ds = create_tf_dataset(X_test, y_test, batch_size=TRAINING_CONFIG['batch_size'], shuffle=False)
     print(" Test dataset created")
-    
+
+    # Cache shape info before deleting numpy arrays
+    sequence_length = X_train.shape[1]
+    keypoint_dim    = X_train.shape[2]
+    n_train, n_val, n_test = len(X_train), len(X_val), len(X_test)
+
+    # Free numpy arrays — tf.data.Dataset already holds the data as tensors
+    del X_train, X_val, X_test, y_train, y_val, y_test
+    gc.collect()
+
     # 4. Build model
     print("\n[4/5] Building model...")
     print("  → Creating model architecture...")
-    
-    # Get sequence length from data shape
-    sequence_length = X_train.shape[1]
-    keypoint_dim = X_train.shape[2]      # Should be 1662
     
     print(f"     Input shape: ({sequence_length}, {keypoint_dim})")
     
@@ -160,8 +165,8 @@ def train_model():
     print("\n" + "="*70)
     print("STARTING TRAINING")
     print("="*70)
-    print(f"Training samples: {len(X_train)}")
-    print(f"Validation samples: {len(X_val)}")
+    print(f"Training samples: {n_train}")
+    print(f"Validation samples: {n_val}")
     print(f"Batch size: {TRAINING_CONFIG['batch_size']}")
     print(f"Epochs: {TRAINING_CONFIG['epochs']}")
     print("="*70 + "\n")
@@ -171,11 +176,14 @@ def train_model():
     
     # Compute class weights to handle imbalance
     from sklearn.utils.class_weight import compute_class_weight
+    # Reconstruct y_train labels from dataset for class weight computation
+    y_train_labels = np.concatenate([y.numpy().argmax(axis=1) for _, y in train_ds])
     class_weights_array = compute_class_weight(
         class_weight='balanced',
-        classes=np.unique(y_train),
-        y=y_train
+        classes=np.unique(y_train_labels),
+        y=y_train_labels
     )
+    del y_train_labels
     class_weight_dict = dict(enumerate(class_weights_array))
     print(f"Class weights computed: min={min(class_weights_array):.3f}, max={max(class_weights_array):.3f}")
 
