@@ -9,10 +9,11 @@ import sys
 import json
 
 import numpy as np
+import gc
 sys.path.append(str(Path(__file__).parent.parent))
 
 from training.data_loader import load_sequences, split_data, create_tf_dataset
-from config import TRAINING_CONFIG, CHECKPOINT_DIR, LOGS_DIR
+from config import TRAINING_CONFIG, CHECKPOINT_DIR, LOGS_DIR, SEQUENCE_LENGTH
 
 
 def configure_gpu():
@@ -59,7 +60,7 @@ def train_model():
     
     # 1. Load data
     print("\n[1/5] Loading data...")
-    X, y, action_names, is_original = load_sequences()  # Load ALL sequences
+    X, y, action_names, is_original = load_sequences(target_length=SEQUENCE_LENGTH)
     num_classes = len(action_names)
     
     # 2. Split data (pass is_original to prevent augmented data leaking into val/test)
@@ -70,6 +71,8 @@ def train_model():
         val_size=TRAINING_CONFIG['val_split'],
         is_original=is_original
     )
+    del X, y, is_original  # free full dataset (~15 GB) before training
+    gc.collect()
     
     # 3. Create datasets
     print("\n[3/5] Creating TensorFlow datasets...")
@@ -177,7 +180,6 @@ def train_model():
     print(f"Class weights computed: min={min(class_weights_array):.3f}, max={max(class_weights_array):.3f}")
 
     print("[DEBUG] About to call model.fit()...")
-    sys.stdout.flush()
     
     history = model.fit(
         train_ds,
