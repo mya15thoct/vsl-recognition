@@ -80,22 +80,16 @@ def load_sequences(sequence_path=SEQUENCE_PATH, max_sequences_per_action=None, t
     
     # Pad or truncate all sequences to max_length
     print(f"\n  Padding/truncating all sequences to {max_length} frames...")
-    X_padded = []
-    for seq in X:
-        if len(seq) < max_length:
-            # Pad with zeros
-            padding = np.zeros((max_length - len(seq), seq.shape[1]))
-            seq_padded = np.vstack([seq, padding])
-        elif len(seq) > max_length:
-            # Truncate to max_length
-            seq_padded = seq[:max_length]
-        else:
-            seq_padded = seq
-        X_padded.append(seq_padded)
-    
-    X = np.array(X_padded)
+    keypoint_dim = X[0].shape[1]
+    X_padded = np.zeros((len(X), max_length, keypoint_dim), dtype=np.float32)
+    for i, seq in enumerate(X):
+        length = min(len(seq), max_length)
+        X_padded[i, :length] = seq[:length]
+    X = X_padded
+    del X_padded
     y = np.array(y)
     is_original = np.array(is_original)
+    print(f"  RAM usage estimate: {X.nbytes / 1e9:.1f} GB")
     
     n_orig = is_original.sum()
     n_aug = (~is_original).sum()
