@@ -250,8 +250,14 @@ def train_variant(variant_key, data, dry_run=False):
     # Evaluate on test set
     test_loss, test_acc = model.evaluate(data['test_ds'], verbose=0)
 
-    y_pred_probs = model.predict(data['test_ds'], verbose=0)
-    y_pred = y_pred_probs.argmax(axis=1)
+    # Batch-by-batch prediction to avoid OOM (never stores full prob matrix)
+    y_pred_chunks = []
+    for x_batch, _ in data['test_ds']:
+        probs = model(x_batch, training=False).numpy()
+        y_pred_chunks.append(probs.argmax(axis=1))
+        del probs
+    y_pred = np.concatenate(y_pred_chunks)
+    del y_pred_chunks
     y_true = data['y_test_labels']
 
     report = classification_report(
@@ -294,7 +300,7 @@ def train_variant(variant_key, data, dry_run=False):
         json.dump(results, f, indent=2, ensure_ascii=False)
 
     # Free model memory before next variant
-    del model, history, y_pred_probs, y_pred
+    del model, history, y_pred
     tf.keras.backend.clear_session()
     gc.collect()
 
