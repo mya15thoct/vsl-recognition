@@ -16,8 +16,16 @@ from tensorflow.keras import layers, Model
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
-from models.components import create_pose_branch, create_face_branch, create_hand_branch
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location(
+    "_components",
+    Path(__file__).parent.parent / "models" / "components.py"
+)
+_mod = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+create_pose_branch = _mod.create_pose_branch
+create_face_branch = _mod.create_face_branch
+create_hand_branch = _mod.create_hand_branch
 
 
 # ---------------------------------------------------------------------------
