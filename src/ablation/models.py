@@ -55,15 +55,18 @@ def _shared_bilstm_attention_head(merged, num_classes, dropout=0.3):
     x = layers.Bidirectional(layers.LSTM(32, return_sequences=True), name='bilstm2')(x)
     x = layers.Dropout(dropout)(x)
 
-    # Temporal Attention
-    attn_scores  = layers.TimeDistributed(
+    # Temporal Attention — use single Lambda to avoid Keras masked-Softmax
+    # shape bug: Softmax(axis=1) on a masked (B,T,1) tensor can produce
+    # (B,T,T) in some Keras versions instead of (B,T,1).
+    attn_scores = layers.TimeDistributed(
         layers.Dense(1, activation='tanh', name='attn_score'), name='attn_td'
-    )(x)
-    attn_weights = layers.Softmax(axis=1, name='temporal_attention')(attn_scores)
-    context      = layers.Multiply(name='attn_apply')([x, attn_weights])
-    context      = layers.Lambda(
-        lambda t: tf.reduce_sum(t, axis=1), name='context_vector'
-    )(context)
+    )(x)  # (B, T, 1)
+    context = layers.Lambda(
+        lambda inputs: tf.reduce_sum(
+            inputs[0] * tf.nn.softmax(inputs[1], axis=1), axis=1
+        ),
+        name='context_vector'
+    )([x, attn_scores])  # (B, features)
 
     # Head
     x = layers.Dense(128, activation='relu', name='dense1')(context)
@@ -240,15 +243,16 @@ def _shared_lstm_attention_head(merged, num_classes, dropout=0.3):
     x = layers.LSTM(32, return_sequences=True, name='lstm2')(x)
     x = layers.Dropout(dropout)(x)
 
-    # Temporal Attention
-    attn_scores  = layers.TimeDistributed(
+    # Temporal Attention — same Lambda fix as _shared_bilstm_attention_head
+    attn_scores = layers.TimeDistributed(
         layers.Dense(1, activation='tanh', name='attn_score'), name='attn_td'
-    )(x)
-    attn_weights = layers.Softmax(axis=1, name='temporal_attention')(attn_scores)
-    context      = layers.Multiply(name='attn_apply')([x, attn_weights])
-    context      = layers.Lambda(
-        lambda t: tf.reduce_sum(t, axis=1), name='context_vector'
-    )(context)
+    )(x)  # (B, T, 1)
+    context = layers.Lambda(
+        lambda inputs: tf.reduce_sum(
+            inputs[0] * tf.nn.softmax(inputs[1], axis=1), axis=1
+        ),
+        name='context_vector'
+    )([x, attn_scores])  # (B, features)
 
     x = layers.Dense(128, activation='relu', name='dense1')(context)
     x = layers.Dropout(0.5)(x)

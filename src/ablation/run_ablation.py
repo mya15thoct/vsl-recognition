@@ -162,22 +162,29 @@ def train_variant(variant_key, data, dry_run=False):
     print("=" * 70)
 
     best_model_path = outdir / 'best_model'
+    history_path    = outdir / 'history.json'
     history_dict    = None
     best_epoch      = None
     train_time_min  = None
     trained_fresh   = False
 
-    # ── Case 1: model already saved → skip training, re-evaluate only ──────
-    if best_model_path.exists() and not dry_run:
-        print(f"[RESUME] Found existing best_model – loading and re-evaluating only")
+    # ── Case 1: training already completed (history.json exists) → re-evaluate only
+    # Note: best_model/ can exist mid-training (ModelCheckpoint saves each epoch),
+    # so we check history.json which is only written AFTER training finishes.
+    if history_path.exists() and not dry_run:
+        print(f"[RESUME] Training already done – loading best_model and re-evaluating")
         model    = tf.keras.models.load_model(str(best_model_path))
         n_params = model.count_params()
         print(f"Total parameters: {n_params:,}")
 
-        if (outdir / 'history.json').exists():
-            with open(outdir / 'history.json') as f:
-                history_dict = json.load(f)
-            best_epoch = int(np.argmax(history_dict['val_accuracy'])) + 1
+        with open(history_path) as f:
+            history_dict = json.load(f)
+        best_epoch = int(np.argmax(history_dict['val_accuracy'])) + 1
+        # Recover train_time_min from previous results.json if it exists
+        prev_results = outdir / 'results.json'
+        if prev_results.exists():
+            with open(prev_results) as f:
+                train_time_min = json.load(f).get('train_time_min')
 
     # ── Case 2: train from scratch ──────────────────────────────────────────
     else:
