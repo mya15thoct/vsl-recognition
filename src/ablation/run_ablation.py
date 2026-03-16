@@ -161,96 +161,112 @@ def train_variant(variant_key, data, dry_run=False):
     print(f"  {label}")
     print("=" * 70)
 
-    # Build model
-    build_fn = VARIANTS[variant_key]
-    model = build_fn(
-        num_classes=data['num_classes'],
-        sequence_length=data['sequence_length']
-    )
-    model.compile(
-        optimizer=Adam(learning_rate=TRAINING_CONFIG['learning_rate']),
-        loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
-        metrics=['accuracy']
-    )
-    model.summary()
-    n_params = model.count_params()
-    print(f"\nTotal parameters: {n_params:,}")
+    best_model_path = outdir / 'best_model'
+    history_dict    = None
+    best_epoch      = None
+    train_time_min  = None
+    trained_fresh   = False
 
-    if dry_run:
-        print("[DRY-RUN] Skipping training.")
-        tf.keras.backend.clear_session()
-        gc.collect()
-        return {
-            'variant':    variant_key,
-            'label':      label,
-            'n_params':   n_params,
-            'test_acc':   None,
-            'macro_f1':   None,
-            'best_epoch': None,
-            'train_time': None,
-            'status':     'dry-run',
-        }
+    # ── Case 1: model already saved → skip training, re-evaluate only ──────
+    if best_model_path.exists() and not dry_run:
+        print(f"[RESUME] Found existing best_model – loading and re-evaluating only")
+        model    = tf.keras.models.load_model(str(best_model_path))
+        n_params = model.count_params()
+        print(f"Total parameters: {n_params:,}")
 
-    # Callbacks
-    log_dir = ABLATION_DIR.parent / 'logs' / 'ablation' / variant_key
-    log_dir.mkdir(parents=True, exist_ok=True)
+        if (outdir / 'history.json').exists():
+            with open(outdir / 'history.json') as f:
+                history_dict = json.load(f)
+            best_epoch = int(np.argmax(history_dict['val_accuracy'])) + 1
 
-    callbacks = [
-        ModelCheckpoint(
-            filepath=str(outdir / 'best_model'),
-            monitor='val_accuracy',
-            save_best_only=True,
-            save_format='tf',
+    # ── Case 2: train from scratch ──────────────────────────────────────────
+    else:
+        build_fn = VARIANTS[variant_key]
+        model = build_fn(
+            num_classes=data['num_classes'],
+            sequence_length=data['sequence_length']
+        )
+        model.compile(
+            optimizer=Adam(learning_rate=TRAINING_CONFIG['learning_rate']),
+            loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+            metrics=['accuracy']
+        )
+        model.summary()
+        n_params = model.count_params()
+        print(f"\nTotal parameters: {n_params:,}")
+
+        if dry_run:
+            print("[DRY-RUN] Skipping training.")
+            tf.keras.backend.clear_session()
+            gc.collect()
+            return {
+                'variant':    variant_key,
+                'label':      label,
+                'n_params':   n_params,
+                'test_acc':   None,
+                'macro_f1':   None,
+                'best_epoch': None,
+                'train_time': None,
+                'status':     'dry-run',
+            }
+
+        log_dir = ABLATION_DIR.parent / 'logs' / 'ablation' / variant_key
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        callbacks = [
+            ModelCheckpoint(
+                filepath=str(outdir / 'best_model'),
+                monitor='val_accuracy',
+                save_best_only=True,
+                save_format='tf',
+                verbose=1
+            ),
+            EarlyStopping(
+                monitor='val_accuracy',
+                patience=TRAINING_CONFIG['early_stopping_patience'],
+                restore_best_weights=True,
+                verbose=1
+            ),
+            ReduceLROnPlateau(
+                monitor='val_loss',
+                factor=0.5,
+                patience=TRAINING_CONFIG['reduce_lr_patience'],
+                verbose=1
+            ),
+            TensorBoard(
+                log_dir=str(log_dir / 'fit'),
+                histogram_freq=0
+            ),
+        ]
+
+        t0 = time.time()
+        history = model.fit(
+            data['train_ds'],
+            validation_data=data['val_ds'],
+            epochs=TRAINING_CONFIG['epochs'],
+            callbacks=callbacks,
+            class_weight=data['class_weight_dict'],
             verbose=1
-        ),
-        EarlyStopping(
-            monitor='val_accuracy',
-            patience=TRAINING_CONFIG['early_stopping_patience'],
-            restore_best_weights=True,
-            verbose=1
-        ),
-        ReduceLROnPlateau(
-            monitor='val_loss',
-            factor=0.5,
-            patience=TRAINING_CONFIG['reduce_lr_patience'],
-            verbose=1
-        ),
-        TensorBoard(
-            log_dir=str(log_dir / 'fit'),
-            histogram_freq=0   # 0 = faster; set to 1 for weight histograms
-        ),
-    ]
+        )
+        train_time_min = round((time.time() - t0) / 60, 2)
+        trained_fresh  = True
 
-    # Train
-    t0 = time.time()
-    history = model.fit(
-        data['train_ds'],
-        validation_data=data['val_ds'],
-        epochs=TRAINING_CONFIG['epochs'],
-        callbacks=callbacks,
-        class_weight=data['class_weight_dict'],
-        verbose=1
-    )
-    train_time = time.time() - t0
+        history_dict = {k: [float(v) for v in vals]
+                        for k, vals in history.history.items()}
+        with open(outdir / 'history.json', 'w') as f:
+            json.dump(history_dict, f, indent=2)
 
-    # Save history
-    history_dict = {k: [float(v) for v in vals]
-                    for k, vals in history.history.items()}
-    with open(outdir / 'history.json', 'w') as f:
-        json.dump(history_dict, f, indent=2)
+        model.save(str(outdir / 'final_model'), save_format='tf')
 
-    # Save final model
-    model.save(str(outdir / 'final_model'), save_format='tf')
+        mapping = {i: name for i, name in enumerate(data['action_names'])}
+        with open(outdir / 'action_mapping.json', 'w') as f:
+            json.dump(mapping, f, indent=2, ensure_ascii=False)
 
-    # Save action mapping
-    mapping = {i: name for i, name in enumerate(data['action_names'])}
-    with open(outdir / 'action_mapping.json', 'w') as f:
-        json.dump(mapping, f, indent=2, ensure_ascii=False)
+        best_epoch = int(np.argmax(history_dict['val_accuracy'])) + 1
 
-    # Evaluate on test set
+    # ── Evaluate (shared by both cases) ─────────────────────────────────────
     test_loss, test_acc = model.evaluate(data['test_ds'], verbose=0)
 
-    # Batch-by-batch prediction to avoid OOM (never stores full prob matrix)
     y_pred_chunks = []
     for x_batch, _ in data['test_ds']:
         probs = model(x_batch, training=False).numpy()
@@ -260,7 +276,7 @@ def train_variant(variant_key, data, dry_run=False):
     del y_pred_chunks
     y_true = data['y_test_labels']
 
-    report = classification_report(
+    report    = classification_report(
         y_true, y_pred,
         labels=list(range(len(data['action_names']))),
         target_names=data['action_names'],
@@ -271,37 +287,34 @@ def train_variant(variant_key, data, dry_run=False):
     macro_pre = report['macro avg']['precision']
     macro_rec = report['macro avg']['recall']
 
-    # Best epoch (0-indexed → 1-indexed)
-    best_epoch = int(np.argmax(history_dict['val_accuracy'])) + 1
-
     print(f"\n{'─'*50}")
     print(f"  Test Accuracy : {test_acc*100:.2f}%")
     print(f"  Macro F1      : {macro_f1*100:.2f}%")
     print(f"  Best Epoch    : {best_epoch}")
-    print(f"  Train Time    : {train_time/60:.1f} min")
+    print(f"  Train Time    : {train_time_min} min")
     print(f"  Parameters    : {n_params:,}")
     print(f"{'─'*50}")
 
-    # Save per-variant results
     results = {
-        'variant':       variant_key,
-        'label':         label,
-        'test_accuracy': float(test_acc),
-        'test_loss':     float(test_loss),
-        'macro_f1':      float(macro_f1),
+        'variant':         variant_key,
+        'label':           label,
+        'test_accuracy':   float(test_acc),
+        'test_loss':       float(test_loss),
+        'macro_f1':        float(macro_f1),
         'macro_precision': float(macro_pre),
-        'macro_recall':  float(macro_rec),
-        'best_epoch':    best_epoch,
-        'train_time_min': round(train_time / 60, 2),
-        'n_params':      n_params,
-        'status':        'done',
+        'macro_recall':    float(macro_rec),
+        'best_epoch':      best_epoch,
+        'train_time_min':  train_time_min,
+        'n_params':        n_params,
+        'status':          'done',
         'classification_report': report,
     }
     with open(outdir / 'results.json', 'w') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
-    # Free model memory before next variant
-    del model, history, y_pred
+    if trained_fresh:
+        del history
+    del model, y_pred
     tf.keras.backend.clear_session()
     gc.collect()
 
