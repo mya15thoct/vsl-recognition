@@ -146,7 +146,7 @@ def load_data():
 # Single-variant training
 # ---------------------------------------------------------------------------
 
-def train_variant(variant_key, data, dry_run=False):
+def train_variant(variant_key, data, dry_run=False, force=False):
     """
     Build, train, evaluate one ablation variant.
     Saves all outputs under ABLATION_DIR / variant_key /.
@@ -171,7 +171,7 @@ def train_variant(variant_key, data, dry_run=False):
     # ── Case 1: training already completed (history.json exists) → re-evaluate only
     # Note: best_model/ can exist mid-training (ModelCheckpoint saves each epoch),
     # so we check history.json which is only written AFTER training finishes.
-    if history_path.exists() and not dry_run:
+    if history_path.exists() and not dry_run and not force:
         print(f"[RESUME] Training already done – loading best_model and re-evaluating")
         model    = tf.keras.models.load_model(str(best_model_path))
         n_params = model.count_params()
@@ -388,6 +388,10 @@ def main():
         '--skip-done', action='store_true',
         help='Skip variants that already have results.json (useful for resuming)'
     )
+    parser.add_argument(
+        '--force', action='store_true',
+        help='Force retrain all variants from scratch, ignoring any saved models'
+    )
     args = parser.parse_args()
 
     configure_gpu()
@@ -407,7 +411,7 @@ def main():
             continue
 
         try:
-            r = train_variant(vk, data, dry_run=args.dry_run)
+            r = train_variant(vk, data, dry_run=args.dry_run, force=args.force)
             all_results.append(_flatten_result(r))
         except Exception as e:
             print(f"\n[ERROR] Variant {vk} failed: {e}")
