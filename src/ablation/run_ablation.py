@@ -262,6 +262,7 @@ def train_variant(variant_key, data, dry_run=False):
 
     report = classification_report(
         y_true, y_pred,
+        labels=list(range(len(data['action_names']))),
         target_names=data['action_names'],
         output_dict=True,
         zero_division=0
@@ -392,6 +393,8 @@ def main():
             print(f"\n[ERROR] Variant {vk} failed: {e}")
             import traceback
             traceback.print_exc()
+            tf.keras.backend.clear_session()
+            gc.collect()
             all_results.append({
                 'variant': vk, 'label': VARIANT_LABELS[vk],
                 'test_acc': None, 'macro_f1': None,
