@@ -307,6 +307,8 @@ def train_variant(variant_key, data, dry_run=False, force=False):
     print(f"\n{'─'*50}")
     print(f"  Test Accuracy : {test_acc*100:.2f}%")
     print(f"  Macro F1      : {macro_f1*100:.2f}%")
+    print(f"  Macro Precision: {macro_pre*100:.2f}%")
+    print(f"  Macro Recall  : {macro_rec*100:.2f}%")
     print(f"  Best Epoch    : {best_epoch}")
     print(f"  Train Time    : {train_time_min} min")
     print(f"  Parameters    : {n_params:,}")
@@ -365,14 +367,16 @@ def update_summary(all_results):
 def _flatten_result(r):
     """Normalize keys from train_variant output for update_summary."""
     return {
-        'variant':       r.get('variant'),
-        'label':         r.get('label'),
-        'test_acc':      r.get('test_accuracy') if 'test_accuracy' in r else r.get('test_acc'),
-        'macro_f1':      r.get('macro_f1'),
-        'best_epoch':    r.get('best_epoch'),
-        'train_time_min': r.get('train_time_min'),
-        'n_params':      r.get('n_params'),
-        'status':        r.get('status'),
+        'variant':          r.get('variant'),
+        'label':            r.get('label'),
+        'test_acc':         r.get('test_accuracy') if 'test_accuracy' in r else r.get('test_acc'),
+        'macro_f1':         r.get('macro_f1'),
+        'macro_precision':  r.get('macro_precision'),
+        'macro_recall':     r.get('macro_recall'),
+        'best_epoch':       r.get('best_epoch'),
+        'train_time_min':   r.get('train_time_min'),
+        'n_params':         r.get('n_params'),
+        'status':           r.get('status'),
     }
 
 
