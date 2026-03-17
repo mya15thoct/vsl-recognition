@@ -58,45 +58,58 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     hand_features = layers.TimeDistributed(hand_branch, name='hand_features')(hand_keypoints)  # (B,T,64)
 
     # === CROSS-PART CONTEXTUAL GATING ===
-    # Each part first "asks" the other two parts for context before computing
-    # its gate weight. This allows cross-part interaction before gating.
-    # pose_ctx = f(face, hand): pose learns what the other parts are doing
+    # Step 1: Mỗi part "hỏi" 2 part kia để lấy context
     pose_ctx = layers.TimeDistributed(
         layers.Dense(64, activation='relu', name='pose_ctx_dense'),
         name='pose_ctx'
     )(layers.Concatenate(name='pose_ctx_input')([face_features, hand_features]))   # (B,T,64)
 
     face_ctx = layers.TimeDistributed(
-        layers.Dense(64, activation='relu', name='face_ctx_dense'),
+        layers.Dense(128, activation='relu', name='face_ctx_dense'),
         name='face_ctx'
-    )(layers.Concatenate(name='face_ctx_input')([pose_features, hand_features]))   # (B,T,64)
+    )(layers.Concatenate(name='face_ctx_input')([pose_features, hand_features]))   # (B,T,128)
 
     hand_ctx = layers.TimeDistributed(
         layers.Dense(64, activation='relu', name='hand_ctx_dense'),
         name='hand_ctx'
     )(layers.Concatenate(name='hand_ctx_input')([pose_features, face_features]))   # (B,T,64)
 
-    # Enrich each part with cross-part context before computing gate weights
+    # Step 2: Enrich mỗi part với cross-part context
     pose_enriched = layers.Concatenate(name='pose_enriched')([pose_features, pose_ctx])  # (B,T,128)
-    face_enriched = layers.Concatenate(name='face_enriched')([face_features, face_ctx])  # (B,T,192)
+    face_enriched = layers.Concatenate(name='face_enriched')([face_features, face_ctx])  # (B,T,256)
     hand_enriched = layers.Concatenate(name='hand_enriched')([hand_features, hand_ctx])  # (B,T,128)
 
-    gate_input = layers.Concatenate(name='gate_input')([pose_enriched, face_enriched, hand_enriched])  # (B,T,448)
+    # Step 3: Tính gate weight độc lập (sigmoid, không phải softmax)
+    # Sigmoid: mỗi gate trong [0,1], độc lập nhau, không bị ép tổng = 1
+    gate_input = layers.Concatenate(name='gate_input')([pose_enriched, face_enriched, hand_enriched])  # (B,T,512)
     gate = layers.TimeDistributed(
-        layers.Dense(3, activation='softmax', name='gate_dense'),
+        layers.Dense(3, activation='sigmoid', name='gate_dense'),
         name='body_part_gate'
     )(gate_input)  # (B,T,3)
 
-    # Extract per-part gate scalars and broadcast-multiply
     pose_scale = layers.Lambda(lambda g: g[:, :, 0:1], name='pose_gate')(gate)   # (B,T,1)
     face_scale = layers.Lambda(lambda g: g[:, :, 1:2], name='face_gate')(gate)   # (B,T,1)
     hand_scale = layers.Lambda(lambda g: g[:, :, 2:3], name='hand_gate')(gate)   # (B,T,1)
 
-    pose_gated = layers.Multiply(name='pose_gated')([pose_features, pose_scale])  # (B,T,64)
-    face_gated = layers.Multiply(name='face_gated')([face_features, face_scale])  # (B,T,128)
-    hand_gated = layers.Multiply(name='hand_gated')([hand_features, hand_scale])  # (B,T,64)
+    # Step 4: Residual gating — output = features_gốc + gate × context
+    # Features gốc luôn được giữ nguyên, gate chỉ thêm cross-part context vào
+    pose_gated = layers.Add(name='pose_gated')([
+        pose_features,
+        layers.Multiply(name='pose_ctx_gated')([pose_ctx, pose_scale])
+    ])  # (B,T,64)
+
+    face_gated = layers.Add(name='face_gated')([
+        face_features,
+        layers.Multiply(name='face_ctx_gated')([face_ctx, face_scale])
+    ])  # (B,T,128)
+
+    hand_gated = layers.Add(name='hand_gated')([
+        hand_features,
+        layers.Multiply(name='hand_ctx_gated')([hand_ctx, hand_scale])
+    ])  # (B,T,64)
 
     merged = layers.Concatenate(name='feature_fusion')([pose_gated, face_gated, hand_gated])  # (B,T,256)
+
 
     # === SHARED LAYERS (cross-part interaction) ===
     x = layers.TimeDistributed(
