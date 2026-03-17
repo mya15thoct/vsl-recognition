@@ -97,7 +97,7 @@ def create_v0_baseline(num_classes, sequence_length):
         layers.Dense(64, activation='relu', name='pose_ctx_dense'), name='pose_ctx'
     )(layers.Concatenate(name='pose_ctx_input')([face_feat, hand_feat]))
     face_ctx = layers.TimeDistributed(
-        layers.Dense(64, activation='relu', name='face_ctx_dense'), name='face_ctx'
+        layers.Dense(128, activation='relu', name='face_ctx_dense'), name='face_ctx'
     )(layers.Concatenate(name='face_ctx_input')([pose_feat, hand_feat]))
     hand_ctx = layers.TimeDistributed(
         layers.Dense(64, activation='relu', name='hand_ctx_dense'), name='hand_ctx'
@@ -107,18 +107,19 @@ def create_v0_baseline(num_classes, sequence_length):
     face_enriched = layers.Concatenate(name='face_enriched')([face_feat, face_ctx])
     hand_enriched = layers.Concatenate(name='hand_enriched')([hand_feat, hand_ctx])
 
+    # Residual sigmoid gating
     gate_input = layers.Concatenate(name='gate_input')([pose_enriched, face_enriched, hand_enriched])
     gate = layers.TimeDistributed(
-        layers.Dense(3, activation='softmax', name='gate_dense'), name='body_part_gate'
+        layers.Dense(3, activation='sigmoid', name='gate_dense'), name='body_part_gate'
     )(gate_input)
 
     pose_scale = layers.Lambda(lambda g: g[:, :, 0:1], name='pose_gate')(gate)
     face_scale = layers.Lambda(lambda g: g[:, :, 1:2], name='face_gate')(gate)
     hand_scale = layers.Lambda(lambda g: g[:, :, 2:3], name='hand_gate')(gate)
 
-    pose_gated = layers.Multiply(name='pose_gated')([pose_feat, pose_scale])
-    face_gated = layers.Multiply(name='face_gated')([face_feat, face_scale])
-    hand_gated = layers.Multiply(name='hand_gated')([hand_feat, hand_scale])
+    pose_gated = layers.Add(name='pose_gated')([pose_feat, layers.Multiply(name='pose_ctx_gated')([pose_ctx, pose_scale])])
+    face_gated = layers.Add(name='face_gated')([face_feat, layers.Multiply(name='face_ctx_gated')([face_ctx, face_scale])])
+    hand_gated = layers.Add(name='hand_gated')([hand_feat, layers.Multiply(name='hand_ctx_gated')([hand_ctx, hand_scale])])
 
     merged = layers.Concatenate(name='feature_fusion')([pose_gated, face_gated, hand_gated])
 
@@ -162,7 +163,7 @@ def create_v1_single_stream(num_classes, sequence_length):
 # ---------------------------------------------------------------------------
 
 def create_v2_no_cross_part_gating(num_classes, sequence_length):
-    """Multi-stream with gating, but gate computed from raw features (no ctx enrichment)"""
+    """Multi-stream with residual gating, but gate computed from each part's OWN features (no cross-part context)"""
     inputs = layers.Input(shape=(sequence_length, 1662), name='sequence_input')
     x = layers.Masking(mask_value=0.0)(inputs)
 
@@ -174,19 +175,25 @@ def create_v2_no_cross_part_gating(num_classes, sequence_length):
     face_feat = layers.TimeDistributed(create_face_branch(1404, 'face'), name='face_features')(face_kp)
     hand_feat = layers.TimeDistributed(create_hand_branch(126,  'hand'), name='hand_features')(hand_kp)
 
-    # Gate from raw features (no cross-part enrichment)
+    # Gate computed from own features only — no cross-part information exchange
     gate_input = layers.Concatenate(name='gate_input')([pose_feat, face_feat, hand_feat])  # (B,T,256)
     gate = layers.TimeDistributed(
-        layers.Dense(3, activation='softmax', name='gate_dense'), name='body_part_gate'
+        layers.Dense(3, activation='sigmoid', name='gate_dense'), name='body_part_gate'
     )(gate_input)
 
     pose_scale = layers.Lambda(lambda g: g[:, :, 0:1], name='pose_gate')(gate)
     face_scale = layers.Lambda(lambda g: g[:, :, 1:2], name='face_gate')(gate)
     hand_scale = layers.Lambda(lambda g: g[:, :, 2:3], name='hand_gate')(gate)
 
-    pose_gated = layers.Multiply(name='pose_gated')([pose_feat, pose_scale])
-    face_gated = layers.Multiply(name='face_gated')([face_feat, face_scale])
-    hand_gated = layers.Multiply(name='hand_gated')([hand_feat, hand_scale])
+    # Self-context projections (no cross-part)
+    pose_self = layers.TimeDistributed(layers.Dense(64,  activation='relu', name='pose_self'), name='pose_self_td')(pose_feat)
+    face_self = layers.TimeDistributed(layers.Dense(128, activation='relu', name='face_self'), name='face_self_td')(face_feat)
+    hand_self = layers.TimeDistributed(layers.Dense(64,  activation='relu', name='hand_self'), name='hand_self_td')(hand_feat)
+
+    # Residual: original + gate * self-projection
+    pose_gated = layers.Add(name='pose_gated')([pose_feat, layers.Multiply(name='pose_ctx_gated')([pose_self, pose_scale])])
+    face_gated = layers.Add(name='face_gated')([face_feat, layers.Multiply(name='face_ctx_gated')([face_self, face_scale])])
+    hand_gated = layers.Add(name='hand_gated')([hand_feat, layers.Multiply(name='hand_ctx_gated')([hand_self, hand_scale])])
 
     merged = layers.Concatenate(name='feature_fusion')([pose_gated, face_gated, hand_gated])
 
@@ -277,7 +284,7 @@ def create_v4_unidirectional_lstm(num_classes, sequence_length):
         layers.Dense(64, activation='relu', name='pose_ctx_dense'), name='pose_ctx'
     )(layers.Concatenate(name='pose_ctx_input')([face_feat, hand_feat]))
     face_ctx = layers.TimeDistributed(
-        layers.Dense(64, activation='relu', name='face_ctx_dense'), name='face_ctx'
+        layers.Dense(128, activation='relu', name='face_ctx_dense'), name='face_ctx'
     )(layers.Concatenate(name='face_ctx_input')([pose_feat, hand_feat]))
     hand_ctx = layers.TimeDistributed(
         layers.Dense(64, activation='relu', name='hand_ctx_dense'), name='hand_ctx'
@@ -287,18 +294,19 @@ def create_v4_unidirectional_lstm(num_classes, sequence_length):
     face_enriched = layers.Concatenate(name='face_enriched')([face_feat, face_ctx])
     hand_enriched = layers.Concatenate(name='hand_enriched')([hand_feat, hand_ctx])
 
+    # Residual sigmoid gating
     gate_input = layers.Concatenate(name='gate_input')([pose_enriched, face_enriched, hand_enriched])
     gate = layers.TimeDistributed(
-        layers.Dense(3, activation='softmax', name='gate_dense'), name='body_part_gate'
+        layers.Dense(3, activation='sigmoid', name='gate_dense'), name='body_part_gate'
     )(gate_input)
 
     pose_scale = layers.Lambda(lambda g: g[:, :, 0:1], name='pose_gate')(gate)
     face_scale = layers.Lambda(lambda g: g[:, :, 1:2], name='face_gate')(gate)
     hand_scale = layers.Lambda(lambda g: g[:, :, 2:3], name='hand_gate')(gate)
 
-    pose_gated = layers.Multiply(name='pose_gated')([pose_feat, pose_scale])
-    face_gated = layers.Multiply(name='face_gated')([face_feat, face_scale])
-    hand_gated = layers.Multiply(name='hand_gated')([hand_feat, hand_scale])
+    pose_gated = layers.Add(name='pose_gated')([pose_feat, layers.Multiply(name='pose_ctx_gated')([pose_ctx, pose_scale])])
+    face_gated = layers.Add(name='face_gated')([face_feat, layers.Multiply(name='face_ctx_gated')([face_ctx, face_scale])])
+    hand_gated = layers.Add(name='hand_gated')([hand_feat, layers.Multiply(name='hand_ctx_gated')([hand_ctx, hand_scale])])
 
     merged = layers.Concatenate(name='feature_fusion')([pose_gated, face_gated, hand_gated])
 
@@ -352,7 +360,7 @@ def create_v5_no_temporal_attention(num_classes, sequence_length):
         layers.Dense(64, activation='relu', name='pose_ctx_dense'), name='pose_ctx'
     )(layers.Concatenate(name='pose_ctx_input')([face_feat, hand_feat]))
     face_ctx = layers.TimeDistributed(
-        layers.Dense(64, activation='relu', name='face_ctx_dense'), name='face_ctx'
+        layers.Dense(128, activation='relu', name='face_ctx_dense'), name='face_ctx'
     )(layers.Concatenate(name='face_ctx_input')([pose_feat, hand_feat]))
     hand_ctx = layers.TimeDistributed(
         layers.Dense(64, activation='relu', name='hand_ctx_dense'), name='hand_ctx'
@@ -362,18 +370,19 @@ def create_v5_no_temporal_attention(num_classes, sequence_length):
     face_enriched = layers.Concatenate(name='face_enriched')([face_feat, face_ctx])
     hand_enriched = layers.Concatenate(name='hand_enriched')([hand_feat, hand_ctx])
 
+    # Residual sigmoid gating
     gate_input = layers.Concatenate(name='gate_input')([pose_enriched, face_enriched, hand_enriched])
     gate = layers.TimeDistributed(
-        layers.Dense(3, activation='softmax', name='gate_dense'), name='body_part_gate'
+        layers.Dense(3, activation='sigmoid', name='gate_dense'), name='body_part_gate'
     )(gate_input)
 
     pose_scale = layers.Lambda(lambda g: g[:, :, 0:1], name='pose_gate')(gate)
     face_scale = layers.Lambda(lambda g: g[:, :, 1:2], name='face_gate')(gate)
     hand_scale = layers.Lambda(lambda g: g[:, :, 2:3], name='hand_gate')(gate)
 
-    pose_gated = layers.Multiply(name='pose_gated')([pose_feat, pose_scale])
-    face_gated = layers.Multiply(name='face_gated')([face_feat, face_scale])
-    hand_gated = layers.Multiply(name='hand_gated')([hand_feat, hand_scale])
+    pose_gated = layers.Add(name='pose_gated')([pose_feat, layers.Multiply(name='pose_ctx_gated')([pose_ctx, pose_scale])])
+    face_gated = layers.Add(name='face_gated')([face_feat, layers.Multiply(name='face_ctx_gated')([face_ctx, face_scale])])
+    hand_gated = layers.Add(name='hand_gated')([hand_feat, layers.Multiply(name='hand_ctx_gated')([hand_ctx, hand_scale])])
 
     merged = layers.Concatenate(name='feature_fusion')([pose_gated, face_gated, hand_gated])
 
