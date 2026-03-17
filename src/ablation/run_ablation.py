@@ -30,6 +30,7 @@ Results saved to:
 import sys
 import json
 import gc
+import random
 import argparse
 import time
 from pathlib import Path
@@ -74,6 +75,15 @@ def configure_gpu():
         print(f"[GPU] Using {gpus[0].name}")
     else:
         print("[GPU] No GPU detected – using CPU")
+
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    import os
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    print(f"[Seed] Global seed set to {seed}")
 
 
 # ---------------------------------------------------------------------------
@@ -392,9 +402,20 @@ def main():
         '--force', action='store_true',
         help='Force retrain all variants from scratch, ignoring any saved models'
     )
+    parser.add_argument(
+        '--seed', type=int, default=None,
+        help='Random seed (default: None = no seeding). Results saved to ablation/seed_{N}/ when specified'
+    )
     args = parser.parse_args()
 
     configure_gpu()
+    if args.seed is not None:
+        set_seed(args.seed)
+        global ABLATION_DIR, SUMMARY_CSV
+        ABLATION_DIR = RECOGNITION_DIR / 'ablation' / f'seed_{args.seed}'
+        ABLATION_DIR.mkdir(parents=True, exist_ok=True)
+        SUMMARY_CSV  = ABLATION_DIR / 'ablation_summary.csv'
+        print(f"[Seed] Results → {ABLATION_DIR}")
 
     # Load data once
     data = load_data()
