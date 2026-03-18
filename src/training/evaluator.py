@@ -79,32 +79,44 @@ def evaluate_model(model_path=None):
     print("\n" + "="*70)
     print("CLASSIFICATION REPORT")
     print("="*70)
-    # Use labels parameter to specify which classes to include
-    print(classification_report(y_test, y_pred_classes, 
+    report = classification_report(y_test, y_pred_classes,
+                                   labels=unique_classes_in_test,
+                                   target_names=present_action_names,
+                                   output_dict=True,
+                                   zero_division=0)
+    print(classification_report(y_test, y_pred_classes,
                                 labels=unique_classes_in_test,
                                 target_names=present_action_names,
                                 zero_division=0))
-    
+
+    accuracy    = report['accuracy']
+    macro_f1    = report['macro avg']['f1-score']
+    macro_pre   = report['macro avg']['precision']
+    macro_rec   = report['macro avg']['recall']
+
+    print("=" * 50)
+    print(f"  Test Accuracy  : {accuracy*100:.2f}%")
+    print(f"  Macro F1       : {macro_f1*100:.2f}%")
+    print(f"  Macro Precision: {macro_pre*100:.2f}%")
+    print(f"  Macro Recall   : {macro_rec*100:.2f}%")
+    print("=" * 50)
+
     # Confusion matrix (only for classes in test set)
     cm = confusion_matrix(y_test, y_pred_classes, labels=unique_classes_in_test)
-    
+
     plt.figure(figsize=(20, 20))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=present_action_names, yticklabels=present_action_names)
     plt.title(f'Confusion Matrix ({len(present_action_names)} classes in test set)')
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
-    
+
     output_path = CHECKPOINT_DIR / 'confusion_matrix.png'
     plt.savefig(output_path, dpi=150)
     print(f"\nConfusion matrix saved: {output_path}")
-    
-    # Accuracy
-    accuracy = (y_test == y_pred_classes).mean()
-    print(f"\nTest Accuracy: {accuracy*100:.2f}%")
-    
-    return accuracy, cm
+
+    return accuracy, macro_f1, macro_pre, macro_rec, cm
 
 
 if __name__ == "__main__":

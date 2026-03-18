@@ -2,8 +2,7 @@
 Hybrid Transformer Encoder + BiLSTM model with:
   - Transformer Encoder branches : per-body-part self-attention feature extraction
                                    (replaces TimeDistributed MLP from hybrid.py)
-  - Cross-Part Contextual Gating : each part enriched with context from other
-                                   parts before computing gate weights
+  - Direct concatenation         : no gating (ablation shows gating hurts)
   - Shared layers                : cross-part interaction
   - BiLSTM ×2                    : sequential temporal modeling
   - Temporal Attention           : weighted frame aggregation
@@ -11,7 +10,7 @@ Hybrid Transformer Encoder + BiLSTM model with:
 
 Key difference vs hybrid.py:
   MLP (per-frame, independent) → Transformer Encoder (self-attention over T)
-  Downstream pipeline (Gating, BiLSTM, Attention) stays identical.
+  Downstream pipeline (BiLSTM, Attention) stays identical for fair comparison.
 """
 import tensorflow as tf
 import numpy as np
@@ -90,12 +89,11 @@ def _create_part_transformer(input_dim, d_model, num_heads, num_blocks, dff,
 
 def create_hybrid_transformer_model(num_classes, sequence_length):
     """
-    Hybrid Transformer Encoder + BiLSTM with Cross-Part Contextual Gating
-    + Temporal Attention.
+    Hybrid Transformer Encoder + BiLSTM + Temporal Attention.
 
     Architecture:
       1. Transformer branches  : self-attention over T per body part
-      2. Cross-Part Gating     : inter-part context → softmax gate weights
+      2. Direct concatenation  : fuse all part features (no gating)
       3. Shared layers         : cross-part interaction
       4. BiLSTM ×2             : sequential temporal modeling
       5. Temporal Attention    : weighted frame aggregation → context vector
@@ -136,43 +134,9 @@ def create_hybrid_transformer_model(num_classes, sequence_length):
     face_features = face_enc(face_kp)   # (B, T, 128)
     hand_features = hand_enc(hand_kp)   # (B, T, 64)
 
-    # ── CROSS-PART CONTEXTUAL GATING ─────────────────────────────────────────
-    # Each part queries the other two to build a context vector, then all
-    # enriched features are concatenated to compute per-frame gate weights.
-    pose_ctx = layers.TimeDistributed(
-        layers.Dense(64, activation='relu', name='pose_ctx_dense'), name='pose_ctx'
-    )(layers.Concatenate(name='pose_ctx_input')([face_features, hand_features]))   # (B,T,64)
-
-    face_ctx = layers.TimeDistributed(
-        layers.Dense(64, activation='relu', name='face_ctx_dense'), name='face_ctx'
-    )(layers.Concatenate(name='face_ctx_input')([pose_features, hand_features]))   # (B,T,64)
-
-    hand_ctx = layers.TimeDistributed(
-        layers.Dense(64, activation='relu', name='hand_ctx_dense'), name='hand_ctx'
-    )(layers.Concatenate(name='hand_ctx_input')([pose_features, face_features]))   # (B,T,64)
-
-    pose_enriched = layers.Concatenate(name='pose_enriched')([pose_features, pose_ctx])  # (B,T,128)
-    face_enriched = layers.Concatenate(name='face_enriched')([face_features, face_ctx])  # (B,T,192)
-    hand_enriched = layers.Concatenate(name='hand_enriched')([hand_features, hand_ctx])  # (B,T,128)
-
-    gate_input = layers.Concatenate(name='gate_input')(
-        [pose_enriched, face_enriched, hand_enriched]
-    )  # (B,T,448)
-    gate = layers.TimeDistributed(
-        layers.Dense(3, activation='softmax', name='gate_dense'),
-        name='body_part_gate'
-    )(gate_input)  # (B,T,3)
-
-    pose_scale = layers.Lambda(lambda g: g[:, :, 0:1], name='pose_gate')(gate)
-    face_scale = layers.Lambda(lambda g: g[:, :, 1:2], name='face_gate')(gate)
-    hand_scale = layers.Lambda(lambda g: g[:, :, 2:3], name='hand_gate')(gate)
-
-    pose_gated = layers.Multiply(name='pose_gated')([pose_features, pose_scale])  # (B,T,64)
-    face_gated = layers.Multiply(name='face_gated')([face_features, face_scale])  # (B,T,128)
-    hand_gated = layers.Multiply(name='hand_gated')([hand_features, hand_scale])  # (B,T,64)
-
+    # ── FEATURE FUSION (direct concat — ablation shows gating hurts) ────────
     merged = layers.Concatenate(name='feature_fusion')(
-        [pose_gated, face_gated, hand_gated]
+        [pose_features, face_features, hand_features]
     )  # (B,T,256)
 
     # ── SHARED LAYERS ────────────────────────────────────────────────────────
