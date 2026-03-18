@@ -268,6 +268,26 @@ def main():
     print(f"Results saved to: {BASELINES_DIR}")
     print("=" * 70)
 
+    # ── Final summary table ───────────────────────────────────────────────────
+    done = [r for r in all_results if r.get('test_accuracy') is not None]
+    if done:
+        print("\n" + "=" * 95)
+        print("  FINAL SUMMARY")
+        print("=" * 95)
+        hdr = f"  {'Baseline':<28} {'Test Acc':>9} {'Macro F1':>9} {'Precision':>10} {'Recall':>8} {'Best Ep':>8} {'Time(m)':>8} {'Params':>10}"
+        print(hdr)
+        print("  " + "-" * (len(hdr) - 2))
+        for r in done:
+            acc  = f"{r['test_accuracy']*100:.2f}%"
+            f1   = f"{r['macro_f1']*100:.2f}%"
+            prec = f"{r['macro_precision']*100:.2f}%"
+            rec  = f"{r['macro_recall']*100:.2f}%"
+            ep   = str(r.get('best_epoch', '—'))
+            tm   = str(r.get('train_time_min', '—'))
+            p    = f"{r['n_params']:,}" if r.get('n_params') else "—"
+            print(f"  {r['baseline']:<28} {acc:>9} {f1:>9} {prec:>10} {rec:>8} {ep:>8} {tm:>8} {p:>10}")
+        print("=" * 95 + "\n")
+
 
 if __name__ == '__main__':
     main()
