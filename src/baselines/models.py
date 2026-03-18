@@ -23,8 +23,8 @@ class LayerNorm(layers.Layer):
         self.epsilon = epsilon
 
     def build(self, input_shape):
-        self.gamma = self.add_weight(shape=(input_shape[-1],), initializer='ones',  trainable=True)
-        self.beta  = self.add_weight(shape=(input_shape[-1],), initializer='zeros', trainable=True)
+        self.gamma = self.add_weight(name='gamma', shape=(input_shape[-1],), initializer='ones',  trainable=True)
+        self.beta  = self.add_weight(name='beta',  shape=(input_shape[-1],), initializer='zeros', trainable=True)
 
     def call(self, x):
         mean = tf.reduce_mean(x, axis=-1, keepdims=True)
