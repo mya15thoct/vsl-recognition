@@ -16,6 +16,22 @@ from tensorflow.keras import layers, Model
 TOTAL_KEYPOINTS = 1662  # 132 pose + 1404 face + 126 hand
 
 
+class LayerNorm(layers.Layer):
+    """Manual LayerNorm to avoid _MklLayerNorm GPU dispatch bug in TF 2.x."""
+    def __init__(self, epsilon=1e-6, **kwargs):
+        super().__init__(**kwargs)
+        self.epsilon = epsilon
+
+    def build(self, input_shape):
+        self.gamma = self.add_weight(shape=(input_shape[-1],), initializer='ones',  trainable=True)
+        self.beta  = self.add_weight(shape=(input_shape[-1],), initializer='zeros', trainable=True)
+
+    def call(self, x):
+        mean = tf.reduce_mean(x, axis=-1, keepdims=True)
+        var  = tf.math.reduce_variance(x, axis=-1, keepdims=True)
+        return self.gamma * (x - mean) / tf.sqrt(var + self.epsilon) + self.beta
+
+
 # ---------------------------------------------------------------------------
 # B1 – MediaPipe + stacked LSTM   (simple keypoint-based baseline)
 # ---------------------------------------------------------------------------
@@ -27,7 +43,7 @@ def create_lstm_baseline(num_classes, sequence_length):
     """
     inp = layers.Input(shape=(sequence_length, TOTAL_KEYPOINTS), name='input')
 
-    x = layers.LayerNormalization(dtype='float32', name='input_norm')(inp)
+    x = LayerNorm(name='input_norm')(inp)
 
     x = layers.LSTM(256, return_sequences=True, name='lstm1')(x)
     x = layers.Dropout(0.3)(x)
@@ -53,7 +69,7 @@ def create_lstm_gru_baseline(num_classes, sequence_length):
     """
     inp = layers.Input(shape=(sequence_length, TOTAL_KEYPOINTS), name='input')
 
-    x = layers.LayerNormalization(dtype='float32', name='input_norm')(inp)
+    x = LayerNorm(name='input_norm')(inp)
 
     x = layers.LSTM(256, return_sequences=True, name='lstm1')(x)
     x = layers.Dropout(0.3)(x)
@@ -83,13 +99,13 @@ def _transformer_block(x, num_heads, ff_dim, dropout_rate, name_prefix):
         name=f'{name_prefix}_mha'
     )(x, x)
     attn_out = layers.Dropout(dropout_rate)(attn_out)
-    x = layers.LayerNormalization(dtype='float32', name=f'{name_prefix}_ln1')(x + attn_out)
+    x = LayerNorm(name=f'{name_prefix}_ln1')(x + attn_out)
 
     ffn = layers.Dense(ff_dim, activation='relu', name=f'{name_prefix}_ffn1')(x)
     ffn = layers.Dropout(dropout_rate)(ffn)
     ffn = layers.Dense(x.shape[-1], name=f'{name_prefix}_ffn2')(ffn)
     ffn = layers.Dropout(dropout_rate)(ffn)
-    x = layers.LayerNormalization(dtype='float32', name=f'{name_prefix}_ln2')(x + ffn)
+    x = LayerNorm(name=f'{name_prefix}_ln2')(x + ffn)
     return x
 
 
@@ -116,7 +132,7 @@ def create_empath_baseline(num_classes, sequence_length):
     Input adapted from (12, 92, 3) → (sequence_length, 1662).
     """
     inp = layers.Input(shape=(sequence_length, TOTAL_KEYPOINTS), name='input')
-    x = layers.LayerNormalization(dtype='float32', name='input_norm')(inp)
+    x = LayerNorm(name='input_norm')(inp)
 
     outputs = [
         _single_transformer(x, num_classes, model_idx=i)
