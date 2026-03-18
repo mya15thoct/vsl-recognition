@@ -251,7 +251,16 @@ def main():
         SUMMARY_CSV = BASELINES_DIR / 'baselines_summary.csv'
 
     data = load_data()
+
+    # Load existing results for baselines NOT in current run
     all_results = []
+    for key in BASELINES:
+        if key in args.baselines:
+            continue
+        result_file = BASELINES_DIR / key / 'results.json'
+        if result_file.exists():
+            with open(result_file) as f:
+                all_results.append(json.load(f))
 
     for key in args.baselines:
         try:
