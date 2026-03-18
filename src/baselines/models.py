@@ -27,7 +27,7 @@ def create_lstm_baseline(num_classes, sequence_length):
     """
     inp = layers.Input(shape=(sequence_length, TOTAL_KEYPOINTS), name='input')
 
-    x = layers.LayerNormalization(name='input_norm')(inp)
+    x = layers.LayerNormalization(dtype='float32', name='input_norm')(inp)
 
     x = layers.LSTM(256, return_sequences=True, name='lstm1')(x)
     x = layers.Dropout(0.3)(x)
@@ -53,7 +53,7 @@ def create_lstm_gru_baseline(num_classes, sequence_length):
     """
     inp = layers.Input(shape=(sequence_length, TOTAL_KEYPOINTS), name='input')
 
-    x = layers.LayerNormalization(name='input_norm')(inp)
+    x = layers.LayerNormalization(dtype='float32', name='input_norm')(inp)
 
     x = layers.LSTM(256, return_sequences=True, name='lstm1')(x)
     x = layers.Dropout(0.3)(x)
@@ -83,13 +83,13 @@ def _transformer_block(x, num_heads, ff_dim, dropout_rate, name_prefix):
         name=f'{name_prefix}_mha'
     )(x, x)
     attn_out = layers.Dropout(dropout_rate)(attn_out)
-    x = layers.LayerNormalization(name=f'{name_prefix}_ln1')(x + attn_out)
+    x = layers.LayerNormalization(dtype='float32', name=f'{name_prefix}_ln1')(x + attn_out)
 
     ffn = layers.Dense(ff_dim, activation='relu', name=f'{name_prefix}_ffn1')(x)
     ffn = layers.Dropout(dropout_rate)(ffn)
     ffn = layers.Dense(x.shape[-1], name=f'{name_prefix}_ffn2')(ffn)
     ffn = layers.Dropout(dropout_rate)(ffn)
-    x = layers.LayerNormalization(name=f'{name_prefix}_ln2')(x + ffn)
+    x = layers.LayerNormalization(dtype='float32', name=f'{name_prefix}_ln2')(x + ffn)
     return x
 
 
@@ -116,7 +116,7 @@ def create_empath_baseline(num_classes, sequence_length):
     Input adapted from (12, 92, 3) → (sequence_length, 1662).
     """
     inp = layers.Input(shape=(sequence_length, TOTAL_KEYPOINTS), name='input')
-    x = layers.LayerNormalization(name='input_norm')(inp)
+    x = layers.LayerNormalization(dtype='float32', name='input_norm')(inp)
 
     outputs = [
         _single_transformer(x, num_classes, model_idx=i)
