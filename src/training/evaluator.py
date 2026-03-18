@@ -89,7 +89,7 @@ def evaluate_model(model_path=None):
                                 target_names=present_action_names,
                                 zero_division=0))
 
-    accuracy    = report['accuracy']
+    accuracy    = report.get('accuracy', report.get('micro avg', {}).get('f1-score', 0.0))
     macro_f1    = report['macro avg']['f1-score']
     macro_pre   = report['macro avg']['precision']
     macro_rec   = report['macro avg']['recall']
