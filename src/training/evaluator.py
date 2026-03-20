@@ -103,18 +103,51 @@ def evaluate_model(model_path=None):
 
     # Confusion matrix (only for classes in test set)
     cm = confusion_matrix(y_test, y_pred_classes, labels=unique_classes_in_test)
+    cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True).clip(min=1)
 
-    plt.figure(figsize=(20, 20))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=present_action_names, yticklabels=present_action_names)
-    plt.title(f'Confusion Matrix ({len(present_action_names)} classes in test set)')
-    plt.ylabel('True Label')
-    plt.xlabel('Predicted Label')
+    # ── 1. Full normalized confusion matrix ───────────────────────────────
+    n = len(present_action_names)
+    fig_size = max(24, n * 0.18)
+    fig, ax = plt.subplots(figsize=(fig_size, fig_size))
+    sns.heatmap(cm_norm, ax=ax, cmap='Blues', vmin=0, vmax=1,
+                xticklabels=present_action_names,
+                yticklabels=present_action_names,
+                linewidths=0, annot=False)
+    ax.set_title(f'Normalized Confusion Matrix ({n} classes)', fontsize=14, pad=12)
+    ax.set_ylabel('True Label', fontsize=11)
+    ax.set_xlabel('Predicted Label', fontsize=11)
+    ax.tick_params(axis='x', labelsize=5, rotation=90)
+    ax.tick_params(axis='y', labelsize=5, rotation=0)
     plt.tight_layout()
+    out_full = CHECKPOINT_DIR / 'confusion_matrix_full.png'
+    plt.savefig(out_full, dpi=200)
+    plt.close()
+    print(f"Confusion matrix (full) saved: {out_full}")
 
-    output_path = CHECKPOINT_DIR / 'confusion_matrix.png'
-    plt.savefig(output_path, dpi=150)
-    print(f"\nConfusion matrix saved: {output_path}")
+    # ── 2. Top confused pairs ─────────────────────────────────────────────
+    TOP_N = 20
+    off_diag = []
+    for i in range(n):
+        for j in range(n):
+            if i != j and cm[i, j] > 0:
+                off_diag.append((cm[i, j], present_action_names[i], present_action_names[j]))
+    off_diag.sort(reverse=True)
+    top = off_diag[:TOP_N]
+
+    if top:
+        labels_top  = [f"{t} → {p}" for _, t, p in top]
+        counts_top  = [c for c, _, _ in top]
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        bars = ax2.barh(labels_top[::-1], counts_top[::-1], color='steelblue')
+        ax2.bar_label(bars, padding=3, fontsize=9)
+        ax2.set_xlabel('Misclassification Count')
+        ax2.set_title(f'Top {TOP_N} Confused Class Pairs')
+        ax2.tick_params(axis='y', labelsize=9)
+        plt.tight_layout()
+        out_top = CHECKPOINT_DIR / 'confusion_matrix_top_confused.png'
+        plt.savefig(out_top, dpi=150)
+        plt.close()
+        print(f"Confusion matrix (top confused) saved: {out_top}")
 
     return accuracy, macro_f1, macro_pre, macro_rec, cm
 
