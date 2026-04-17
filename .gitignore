@@ -1,5 +1,5 @@
 # Data (raw videos - do not track)
-data/
+/data/
 *.zip
 *.tar.gz
 
