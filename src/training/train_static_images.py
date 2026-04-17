@@ -1,227 +1,266 @@
 """
-Fine-tune Word Model ENCODER on static images (1 frame per gloss).
+Train Word Model on combined vocabulary: video sequences + static images.
 
-Strategy:
-  - Freeze BiLSTM + Temporal Attention + output head
-  - Only train per-frame encoder: pose/face/hand MLP branches + shared dense layers
-  - Static images padded with zeros to match sequence_length
-  - Masking layer ignores zero-padded frames automatically
-
-Why freeze BiLSTM?
-  - BiLSTM learns temporal patterns from multi-frame videos
-  - Static images have no temporal info → would corrupt BiLSTM if trained on them
-  - Encoder (MLP branches) learns visual features per-frame → benefits from static images
+Handles the case where ISL image classes differ from video classes:
+  - Merges both vocabularies into one combined class list
+  - Transfers encoder + BiLSTM weights from old model (old vocabulary)
+  - Attaches a new output head for the expanded vocabulary
+  - Trains on mixed data: video sequences + padded image sequences
+  - Uses class weights to handle imbalance (images have far fewer samples)
 
 Usage:
-  python src/training/train_static_images.py
-  python src/training/train_static_images.py --model_path /mnt/ngan/recognition/checkpoints/mlp/best_model
+  python src/training/train_static_images.py \
+    --model_path  /mnt/ngan/recognition/checkpoints/best_model \
+    --seq_path    /mnt/ngan/recognition/sequences \
+    --image_seq_path /mnt/ngan/recognition/sequences \
+    --save_path   /mnt/ngan/recognition/checkpoints/best_model_combined \
+    --action_mapping_path /mnt/ngan/recognition/checkpoints/action_mapping.json
 """
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras import layers, Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
+from sklearn.utils.class_weight import compute_class_weight
 import argparse
-import sys
 import json
+import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from config import SEQUENCE_PATH, CHECKPOINT_DIR, SEQUENCE_LENGTH, IMAGE_DIR
+from config import SEQUENCE_PATH, CHECKPOINT_DIR, SEQUENCE_LENGTH
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FREEZE / UNFREEZE HELPERS
+# LOAD VIDEO SEQUENCES
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Layers to freeze (temporal modeling — not useful for single-frame input)
-FROZEN_LAYER_NAMES = [
-    'shared_td1', 'shared_td2',
-    'bilstm1', 'bilstm2',
-    'attn_td', 'temporal_attention', 'attn_apply', 'context_vector',
-    'dense1', 'output',
-]
-
-# Layers to train (per-frame visual encoder)
-ENCODER_LAYER_NAMES = [
-    'pose_features', 'face_features', 'hand_features',
-]
-
-
-def freeze_temporal_layers(model: tf.keras.Model) -> int:
-    """Freeze BiLSTM, Attention, and head layers. Return count of frozen params."""
-    frozen = 0
-    for layer in model.layers:
-        if any(name in layer.name for name in FROZEN_LAYER_NAMES):
-            layer.trainable = False
-            frozen += layer.count_params()
-        else:
-            layer.trainable = True
-    return frozen
-
-
-def print_trainable_summary(model: tf.keras.Model):
-    total    = model.count_params()
-    trainable = sum(tf.keras.backend.count_params(w) for w in model.trainable_weights)
-    frozen   = total - trainable
-    print(f"\n  Total params:    {total:,}")
-    print(f"  Trainable:       {trainable:,}  ← encoder only")
-    print(f"  Frozen:          {frozen:,}  ← BiLSTM + Attention + Head")
-
-    print("\n  Layer trainability:")
-    for layer in model.layers:
-        if layer.count_params() > 0:
-            status = "TRAIN" if layer.trainable else "FROZEN"
-            print(f"    [{status}] {layer.name:35s} {layer.count_params():>10,} params")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DATA LOADING
-# ─────────────────────────────────────────────────────────────────────────────
-
-def load_static_sequences(sequence_path=None, sequence_length=None, action_mapping_path=None):
-    """
-    Load only static image sequences (*_static.npy) from the sequences folder.
-    Uses action_mapping.json from the trained model to ensure class indices match.
-
-    Returns:
-        X: (N, sequence_length, 1662)
-        y: (N,) integer labels matching the model's class indices
-        action_names: list of class names (from model's mapping)
-    """
-    sequence_path       = Path(sequence_path or SEQUENCE_PATH)
-    sequence_length     = sequence_length or SEQUENCE_LENGTH or 33
-    action_mapping_path = action_mapping_path or str(
-        CHECKPOINT_DIR / 'action_mapping.json'
-    )
-
-    # Load action mapping from trained model → {index: class_name}
-    print(f"\nLoading action mapping from {action_mapping_path}...")
-    with open(action_mapping_path, 'r') as f:
-        mapping = json.load(f)                            # {"0": "A_LOT", "1": "ABUSE", ...}
-    action_names   = [mapping[str(i)] for i in range(len(mapping))]
-    name_to_idx    = {name: i for i, name in enumerate(action_names)}
-    print(f"  Model classes: {len(action_names)}")
-
-    print(f"Loading static sequences from {sequence_path}...")
+def load_video_sequences(seq_path, action_mapping_path, sequence_length):
+    """Load original video sequences using existing action_mapping.json."""
+    print(f"\n[VIDEO] Loading from {seq_path}...")
+    with open(action_mapping_path) as f:
+        mapping = json.load(f)                              # {"0": "BRING", ...}
+    action_names = [mapping[str(i)] for i in range(len(mapping))]
 
     X, y = [], []
-    for class_name, label_idx in name_to_idx.items():
-        class_folder  = sequence_path / class_name
-        if not class_folder.exists():
+    for label_idx, class_name in enumerate(action_names):
+        folder = Path(seq_path) / class_name
+        if not folder.exists():
             continue
-        static_files = sorted(class_folder.glob('*_static.npy'))
-        for npy_file in static_files:
-            seq = np.load(npy_file).astype(np.float32)   # (1, 1662)
-            T   = seq.shape[0]
+        for npy in sorted(folder.glob('*.npy')):
+            if '_static' in npy.stem:
+                continue                                    # skip images here
+            seq = np.load(npy).astype(np.float32)
             padded = np.zeros((sequence_length, 1662), dtype=np.float32)
-            padded[:min(T, sequence_length)] = seq[:min(T, sequence_length)]
+            padded[:min(len(seq), sequence_length)] = seq[:min(len(seq), sequence_length)]
             X.append(padded)
             y.append(label_idx)
 
-    X = np.array(X, dtype=np.float32)
-    y = np.array(y, dtype=np.int32)
-
-    print(f"  Static samples: {len(X)}")
-    print(f"  Shape:          {X.shape}")
-
-    return X, y, action_names
-
+    print(f"  Video samples: {len(X)}  |  Classes: {len(action_names)}")
+    return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32), action_names
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TRAINING
+# LOAD IMAGE SEQUENCES
 # ─────────────────────────────────────────────────────────────────────────────
 
-def train_encoder_on_static(
-    model_path:          str   = None,
-    sequence_path:       str   = None,
-    save_path:           str   = None,
-    action_mapping_path: str   = None,
-    lr:                  float = 1e-4,
-    epochs:              int   = 100,
+def load_image_sequences(seq_path, sequence_length):
+    """Load static image sequences (*_static.npy) — all classes found in folder."""
+    print(f"\n[IMAGE] Loading from {seq_path}...")
+    folders = sorted([d for d in Path(seq_path).iterdir() if d.is_dir()])
+
+    image_classes = []
+    raw = []                    # [(class_name, array), ...]
+
+    for folder in folders:
+        static_files = sorted(folder.glob('*_static.npy'))
+        if not static_files:
+            continue
+        image_classes.append(folder.name)
+        for npy in static_files:
+            seq = np.load(npy).astype(np.float32)
+            padded = np.zeros((sequence_length, 1662), dtype=np.float32)
+            padded[:min(len(seq), sequence_length)] = seq[:min(len(seq), sequence_length)]
+            raw.append((folder.name, padded))
+
+    print(f"  Image classes: {len(image_classes)}")
+    print(f"  Image samples: {len(raw)}")
+    return raw, image_classes
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MERGE VOCABULARIES
+# ─────────────────────────────────────────────────────────────────────────────
+
+def merge_vocabularies(video_names, image_names):
+    """
+    Merge video and image class lists into one combined vocabulary.
+    Video classes keep their existing indices; new image classes are appended.
+
+    Returns:
+        all_names:    combined list (video_names + new_image_only_names)
+        name_to_idx:  {class_name: new_index}
+        new_classes:  list of image classes not in video vocabulary
+    """
+    video_set   = set(video_names)
+    new_classes = [n for n in image_names if n not in video_set]
+
+    all_names   = video_names + new_classes
+    name_to_idx = {name: i for i, name in enumerate(all_names)}
+
+    print(f"\n[VOCAB] Video classes:     {len(video_names)}")
+    print(f"[VOCAB] Image-only classes: {len(new_classes)}")
+    print(f"[VOCAB] Combined:           {len(all_names)}")
+    if new_classes:
+        print(f"        New classes (sample): {new_classes[:5]} ...")
+    return all_names, name_to_idx, new_classes
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUILD EXPANDED MODEL
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_expanded_model(old_model: tf.keras.Model, new_num_classes: int) -> tf.keras.Model:
+    """
+    Clone old model architecture, transfer weights, attach new output head.
+
+    Layers transferred (same weights):
+      - All layers EXCEPT the final Dense output head
+
+    New output head:
+      - dense1 weights transferred (same size)
+      - output: Dense(new_num_classes)  ← NEW, trained from scratch
+    """
+    # Re-use everything up to (but not including) the old output layer
+    second_to_last = old_model.layers[-2].output      # output of 'dense1'
+
+    new_output = layers.Dense(
+        new_num_classes, activation='softmax', name='output'
+    )(second_to_last)
+
+    new_model = Model(inputs=old_model.input, outputs=new_output,
+                      name='WordModel_Combined')
+
+    # Copy weights from old model except output layer
+    for new_layer in new_model.layers:
+        try:
+            old_layer = old_model.get_layer(new_layer.name)
+            new_layer.set_weights(old_layer.get_weights())
+        except (ValueError, Exception):
+            pass                                       # output layer — skip
+
+    print(f"\n[MODEL] Expanded output: {old_model.output_shape[-1]} → {new_num_classes} classes")
+    return new_model
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN TRAINING FUNCTION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def train_combined(
+    model_path:          str,
+    seq_path:            str,
+    save_path:           str,
+    action_mapping_path: str,
+    sequence_length:     int   = None,
+    lr:                  float = 5e-4,
+    epochs:              int   = 200,
     batch_size:          int   = 32,
     val_split:           float = 0.1,
 ):
-    """
-    Load pretrained Word Model → freeze BiLSTM → fine-tune encoder on static images.
-
-    Args:
-        model_path:    Path to trained Word Model checkpoint.
-        sequence_path: Root sequences folder (contains *_static.npy files).
-        save_path:     Where to save the fine-tuned model.
-        lr:            Learning rate (small — encoder already has good features).
-        epochs:        Max training epochs.
-        batch_size:    Batch size.
-        val_split:     Validation fraction.
-    """
-    model_path = model_path or str(CHECKPOINT_DIR / 'best_model')
-    save_path  = save_path  or str(CHECKPOINT_DIR / 'best_model_enriched')
+    seq_path    = seq_path    or str(SEQUENCE_PATH)
+    save_path   = save_path   or str(CHECKPOINT_DIR / 'best_model_combined')
+    action_mapping_path = action_mapping_path or str(CHECKPOINT_DIR / 'action_mapping.json')
 
     print("=" * 60)
-    print("ENCODER FINE-TUNING ON STATIC IMAGES")
+    print("COMBINED VOCABULARY TRAINING (Video + Images)")
     print("=" * 60)
 
-    # ── Load model ────────────────────────────────────────────────────────────
-    print(f"\nLoading Word Model from {model_path}...")
-    model = tf.keras.models.load_model(model_path)
-
-    # Detect sequence_length from model input shape
-    seq_len = model.input_shape[1]
-    print(f"  Sequence length from model: {seq_len}")
+    # ── Load old model to get sequence_length ────────────────────────────────
+    print(f"\nLoading base model from {model_path}...")
+    old_model   = tf.keras.models.load_model(model_path)
+    seq_len     = sequence_length or old_model.input_shape[1]
+    print(f"  Sequence length: {seq_len}")
 
     # ── Load data ─────────────────────────────────────────────────────────────
-    X, y, action_names = load_static_sequences(
-        sequence_path,
-        sequence_length=seq_len,
-        action_mapping_path=action_mapping_path,
-    )
-    num_classes = len(action_names)
-    y_cat = tf.keras.utils.to_categorical(y, num_classes)
+    X_vid, y_vid, video_names = load_video_sequences(seq_path, action_mapping_path, seq_len)
+    raw_images, image_names   = load_image_sequences(seq_path, seq_len)
 
-    # ── Freeze BiLSTM / Attention / Head ──────────────────────────────────────
-    print("\nFreezing temporal layers...")
-    freeze_temporal_layers(model)
-    print_trainable_summary(model)
+    # ── Merge vocabularies ────────────────────────────────────────────────────
+    all_names, name_to_idx, new_classes = merge_vocabularies(video_names, image_names)
+    new_num_classes = len(all_names)
 
-    # ── Compile ───────────────────────────────────────────────────────────────
+    # Re-index video labels (same as before, no change needed)
+    # Re-index image labels with new combined index
+    X_img = np.array([x for _, x in raw_images], dtype=np.float32)
+    y_img = np.array([name_to_idx[name] for name, _ in raw_images], dtype=np.int32)
+
+    # ── Combine ───────────────────────────────────────────────────────────────
+    X_all = np.concatenate([X_vid, X_img], axis=0)
+    y_all = np.concatenate([y_vid, y_img], axis=0)
+
+    # Shuffle
+    idx   = np.random.permutation(len(X_all))
+    X_all, y_all = X_all[idx], y_all[idx]
+
+    y_cat = tf.keras.utils.to_categorical(y_all, new_num_classes)
+
+    print(f"\n[DATA] Total samples: {len(X_all)}")
+    print(f"       Video: {len(X_vid)}  |  Image: {len(X_img)}")
+
+    # ── Build expanded model ──────────────────────────────────────────────────
+    model = build_expanded_model(old_model, new_num_classes)
+
+    # Class weights to handle imbalance (video >> image)
+    cw_array = compute_class_weight('balanced', classes=np.unique(y_all), y=y_all)
+    cw_dict  = dict(enumerate(cw_array))
+
     model.compile(
         optimizer=Adam(learning_rate=lr),
-        loss='categorical_crossentropy',
+        loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
         metrics=['accuracy'],
     )
+    model.summary()
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     callbacks = [
-        EarlyStopping(monitor='val_accuracy', patience=15,
+        EarlyStopping(monitor='val_accuracy', patience=20,
                       restore_best_weights=True, verbose=1),
         ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                          patience=7, min_lr=1e-7, verbose=1),
+                          patience=10, min_lr=1e-6, verbose=1),
         ModelCheckpoint(save_path, monitor='val_accuracy',
                         save_best_only=True, verbose=1),
     ]
 
     # ── Train ─────────────────────────────────────────────────────────────────
     print(f"\n{'=' * 60}")
-    print("TRAINING (encoder only — BiLSTM frozen)")
-    print(f"  Samples:    {len(X)}")
+    print("TRAINING on combined vocabulary")
+    print(f"  Classes:    {new_num_classes}  ({len(video_names)} video + {len(new_classes)} new)")
+    print(f"  Samples:    {len(X_all)}")
     print(f"  lr:         {lr}")
-    print(f"  Epochs:     {epochs}")
-    print(f"  Batch size: {batch_size}")
     print(f"{'=' * 60}\n")
 
-    history = model.fit(
-        X, y_cat,
+    model.fit(
+        X_all, y_cat,
         epochs=epochs,
         batch_size=batch_size,
         validation_split=val_split,
         callbacks=callbacks,
+        class_weight=cw_dict,
         verbose=1,
     )
 
-    print(f"\n[DONE] Fine-tuned model saved to: {save_path}")
-    print("[DONE] Next: python src/utils/build_dictionary.py to build Attention Dictionary")
+    # ── Save action mapping ───────────────────────────────────────────────────
+    mapping_out = {str(i): name for i, name in enumerate(all_names)}
+    mapping_path = Path(save_path).parent / 'action_mapping_combined.json'
+    with open(mapping_path, 'w') as f:
+        json.dump(mapping_out, f, indent=2)
+
+    print(f"\n[DONE] Model saved to:          {save_path}")
+    print(f"[DONE] Action mapping saved to: {mapping_path}")
+    print(f"[DONE] Next: python src/utils/build_dictionary.py")
     return model
 
 
@@ -230,23 +269,19 @@ def train_encoder_on_static(
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Fine-tune Word Model encoder on static images")
-    parser.add_argument('--model_path',    type=str, default=None,
-                        help='Path to trained Word Model (default: CHECKPOINT_DIR/best_model)')
-    parser.add_argument('--sequence_path', type=str, default=None,
-                        help='Root sequences folder (default: SEQUENCE_PATH in config)')
-    parser.add_argument('--save_path',     type=str, default=None,
-                        help='Output path for fine-tuned model (default: CHECKPOINT_DIR/best_model_enriched)')
-    parser.add_argument('--action_mapping_path', type=str, default=None,
-                        help='Path to action_mapping.json (default: CHECKPOINT_DIR/action_mapping.json)')
-    parser.add_argument('--lr',            type=float, default=1e-4)
-    parser.add_argument('--epochs',        type=int,   default=100)
-    parser.add_argument('--batch_size',    type=int,   default=32)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_path',          type=str,   required=True)
+    parser.add_argument('--seq_path',            type=str,   default=None)
+    parser.add_argument('--save_path',           type=str,   default=None)
+    parser.add_argument('--action_mapping_path', type=str,   default=None)
+    parser.add_argument('--lr',                  type=float, default=5e-4)
+    parser.add_argument('--epochs',              type=int,   default=200)
+    parser.add_argument('--batch_size',          type=int,   default=32)
     args = parser.parse_args()
 
-    train_encoder_on_static(
+    train_combined(
         model_path=args.model_path,
-        sequence_path=args.sequence_path,
+        seq_path=args.seq_path,
         save_path=args.save_path,
         action_mapping_path=args.action_mapping_path,
         lr=args.lr,
