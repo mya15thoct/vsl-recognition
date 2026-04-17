@@ -135,31 +135,50 @@ def extract_keypoints_from_images(image_dir=None, sequence_path=None):
         return
 
     classes = sorted([d.name for d in image_dir.iterdir() if d.is_dir()])
-    print(f"\nFound {len(classes)} classes in {image_dir}")
+    print(f"\nFound {len(classes)} image classes in {image_dir}")
     print(f"Output: {sequence_path}\n")
 
     IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
+
+    # Build case-insensitive lookup from EXISTING video sequence folders
+    seq_path = Path(sequence_path)
+    existing_folders = {d.name.upper(): d.name for d in seq_path.iterdir() if d.is_dir()} \
+                       if seq_path.exists() else {}
+    print(f"Found {len(existing_folders)} existing video sequence folders.")
+    print("Matching image folder names to existing sequence folders (case-insensitive)...\n")
 
     print("Initializing MediaPipe Holistic...")
     holistic = get_holistic_model()
 
     total_processed = 0
     total_skipped   = 0
+    total_unmatched = 0
 
     for class_idx, class_name in enumerate(classes):
+        # Case-insensitive match to existing sequence folder
+        matched_name = existing_folders.get(class_name.upper())
+        if matched_name is None:
+            print(f"  [SKIP] '{class_name}' — no matching video sequence folder found")
+            total_unmatched += 1
+            continue
+
+        if matched_name != class_name:
+            print(f"  [MATCH] '{class_name}' → '{matched_name}'")
+
         class_path = image_dir / class_name
         images = [p for p in class_path.iterdir()
                   if p.suffix.lower() in IMAGE_EXTENSIONS]
 
         if not images:
-            print(f"[WARNING] No images found in {class_name}")
+            print(f"  [WARNING] No images found in {class_name}")
             continue
 
-        print(f"[{class_idx+1}/{len(classes)}] '{class_name}' ({len(images)} images)")
+        print(f"  [{class_idx+1}/{len(classes)}] '{matched_name}' ({len(images)} images)")
 
-        # Save into same sequences folder — data_loader picks them up automatically
-        seq_class_path = Path(sequence_path) / class_name
+        # Save using the MATCHED folder name (matches video sequences exactly)
+        seq_class_path = seq_path / matched_name
         seq_class_path.mkdir(parents=True, exist_ok=True)
+
 
         for img_path in images:
             frame = cv2.imread(str(img_path))
@@ -181,10 +200,11 @@ def extract_keypoints_from_images(image_dir=None, sequence_path=None):
 
     print(f"\n{'=' * 60}")
     print(f"[OK] STATIC IMAGE EXTRACTION COMPLETE")
-    print(f"  Processed: {total_processed}")
-    print(f"  Skipped:   {total_skipped}")
-    print(f"  Saved to:  {sequence_path}")
-    print(f"  → data_loader.py will load these automatically alongside video sequences")
+    print(f"  Processed:  {total_processed}")
+    print(f"  Skipped:    {total_skipped}   (unreadable images)")
+    print(f"  Unmatched:  {total_unmatched}  (no video folder match — skipped)")
+    print(f"  Saved to:   {sequence_path}")
+    print(f"  → data_loader.py will load these alongside video sequences")
     print(f"{'=' * 60}")
 
 
