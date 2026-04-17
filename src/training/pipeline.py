@@ -152,7 +152,7 @@ def run_full_pipeline():
     print("="*70)
     
     try:
-        eval_acc, confusion_matrix = evaluate_model()
+        eval_acc, macro_f1, macro_pre, macro_rec, confusion_matrix = evaluate_model()
         print("Evaluation completed successfully")
     except Exception as e:
         print(f" Evaluation failed: {e}")

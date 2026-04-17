@@ -119,7 +119,7 @@ def evaluate_model(model_path=None):
     ax.tick_params(axis='x', labelsize=5, rotation=90)
     ax.tick_params(axis='y', labelsize=5, rotation=0)
     plt.tight_layout()
-    out_full = CHECKPOINT_DIR / 'confusion_matrix_full.png'
+    out_full = Path(__file__).parent.parent / 'visualization' / 'confusion_matrix_full.png'
     plt.savefig(out_full, dpi=200)
     plt.close()
     print(f"Confusion matrix (full) saved: {out_full}")
@@ -144,7 +144,7 @@ def evaluate_model(model_path=None):
         ax2.set_title(f'Top {TOP_N} Confused Class Pairs')
         ax2.tick_params(axis='y', labelsize=9)
         plt.tight_layout()
-        out_top = CHECKPOINT_DIR / 'confusion_matrix_top_confused.png'
+        out_top = Path(__file__).parent.parent / 'visualization' / 'confusion_matrix_top_confused.png'
         plt.savefig(out_top, dpi=150)
         plt.close()
         print(f"Confusion matrix (top confused) saved: {out_top}")

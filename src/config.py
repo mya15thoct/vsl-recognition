@@ -5,8 +5,9 @@ import os
 from pathlib import Path
 
 # ==================== PATHS ====================
-DATA_DIR = Path("/mnt/ngan/vsl_data")          # Raw videos (read-only)
-RECOGNITION_DIR = Path("/mnt/ngan/recognition")  # All outputs go here
+DATA_DIR        = Path("/mnt/ngan/vsl_data")          # Raw videos (read-only)
+IMAGE_DIR       = Path("/mnt/ngan/ISL-Frames-Data")   # Static image frames (1 frame/gloss)
+RECOGNITION_DIR = Path("/mnt/ngan/recognition")        # All outputs go here
 
 SEQUENCE_PATH  = RECOGNITION_DIR / "sequences"   # Extracted .npy sequences
 
