@@ -79,35 +79,43 @@ def print_trainable_summary(model: tf.keras.Model):
 # DATA LOADING
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_static_sequences(sequence_path=None, sequence_length=None):
+def load_static_sequences(sequence_path=None, sequence_length=None, action_mapping_path=None):
     """
     Load only static image sequences (*_static.npy) from the sequences folder.
+    Uses action_mapping.json from the trained model to ensure class indices match.
 
     Returns:
-        X: (N, sequence_length, 1662) — padded to sequence_length
-        y: (N,)  integer labels
-        action_names: list of class names
+        X: (N, sequence_length, 1662)
+        y: (N,) integer labels matching the model's class indices
+        action_names: list of class names (from model's mapping)
     """
-    sequence_path  = Path(sequence_path or SEQUENCE_PATH)
-    sequence_length = sequence_length or SEQUENCE_LENGTH or 33
+    sequence_path       = Path(sequence_path or SEQUENCE_PATH)
+    sequence_length     = sequence_length or SEQUENCE_LENGTH or 33
+    action_mapping_path = action_mapping_path or str(
+        CHECKPOINT_DIR / 'action_mapping.json'
+    )
 
-    print(f"\nLoading static sequences from {sequence_path}...")
+    # Load action mapping from trained model → {index: class_name}
+    print(f"\nLoading action mapping from {action_mapping_path}...")
+    with open(action_mapping_path, 'r') as f:
+        mapping = json.load(f)                            # {"0": "A_LOT", "1": "ABUSE", ...}
+    action_names   = [mapping[str(i)] for i in range(len(mapping))]
+    name_to_idx    = {name: i for i, name in enumerate(action_names)}
+    print(f"  Model classes: {len(action_names)}")
 
-    action_folders = sorted([d for d in sequence_path.iterdir() if d.is_dir()])
-    action_names   = [d.name for d in action_folders]
+    print(f"Loading static sequences from {sequence_path}...")
 
     X, y = [], []
-
-    for label_idx, folder in enumerate(action_folders):
-        static_files = sorted(folder.glob('*_static.npy'))
+    for class_name, label_idx in name_to_idx.items():
+        class_folder  = sequence_path / class_name
+        if not class_folder.exists():
+            continue
+        static_files = sorted(class_folder.glob('*_static.npy'))
         for npy_file in static_files:
             seq = np.load(npy_file).astype(np.float32)   # (1, 1662)
             T   = seq.shape[0]
-
-            # Pad to sequence_length
             padded = np.zeros((sequence_length, 1662), dtype=np.float32)
             padded[:min(T, sequence_length)] = seq[:min(T, sequence_length)]
-
             X.append(padded)
             y.append(label_idx)
 
@@ -115,10 +123,10 @@ def load_static_sequences(sequence_path=None, sequence_length=None):
     y = np.array(y, dtype=np.int32)
 
     print(f"  Static samples: {len(X)}")
-    print(f"  Classes:        {len(action_names)}")
     print(f"  Shape:          {X.shape}")
 
     return X, y, action_names
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -126,13 +134,14 @@ def load_static_sequences(sequence_path=None, sequence_length=None):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def train_encoder_on_static(
-    model_path:      str   = None,
-    sequence_path:   str   = None,
-    save_path:       str   = None,
-    lr:              float = 1e-4,
-    epochs:          int   = 100,
-    batch_size:      int   = 32,
-    val_split:       float = 0.1,
+    model_path:          str   = None,
+    sequence_path:       str   = None,
+    save_path:           str   = None,
+    action_mapping_path: str   = None,
+    lr:                  float = 1e-4,
+    epochs:              int   = 100,
+    batch_size:          int   = 32,
+    val_split:           float = 0.1,
 ):
     """
     Load pretrained Word Model → freeze BiLSTM → fine-tune encoder on static images.
@@ -162,7 +171,11 @@ def train_encoder_on_static(
     print(f"  Sequence length from model: {seq_len}")
 
     # ── Load data ─────────────────────────────────────────────────────────────
-    X, y, action_names = load_static_sequences(sequence_path, sequence_length=seq_len)
+    X, y, action_names = load_static_sequences(
+        sequence_path,
+        sequence_length=seq_len,
+        action_mapping_path=action_mapping_path,
+    )
     num_classes = len(action_names)
     y_cat = tf.keras.utils.to_categorical(y, num_classes)
 
@@ -224,6 +237,8 @@ if __name__ == '__main__':
                         help='Root sequences folder (default: SEQUENCE_PATH in config)')
     parser.add_argument('--save_path',     type=str, default=None,
                         help='Output path for fine-tuned model (default: CHECKPOINT_DIR/best_model_enriched)')
+    parser.add_argument('--action_mapping_path', type=str, default=None,
+                        help='Path to action_mapping.json (default: CHECKPOINT_DIR/action_mapping.json)')
     parser.add_argument('--lr',            type=float, default=1e-4)
     parser.add_argument('--epochs',        type=int,   default=100)
     parser.add_argument('--batch_size',    type=int,   default=32)
@@ -233,6 +248,7 @@ if __name__ == '__main__':
         model_path=args.model_path,
         sequence_path=args.sequence_path,
         save_path=args.save_path,
+        action_mapping_path=args.action_mapping_path,
         lr=args.lr,
         epochs=args.epochs,
         batch_size=args.batch_size,
