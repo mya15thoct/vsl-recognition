@@ -13,7 +13,7 @@ import gc
 sys.path.append(str(Path(__file__).parent.parent))
 
 from training.data_loader import load_sequences, split_data, create_tf_dataset
-from config import TRAINING_CONFIG, CHECKPOINT_DIR, LOGS_DIR, SEQUENCE_LENGTH
+from config import TRAINING_CONFIG, SEQUENCE_LENGTH
 
 
 def configure_gpu():
@@ -48,19 +48,38 @@ def configure_gpu():
     print("="*70 + "\n")
 
 
-def train_model():
-    """Main training function"""
-    
+def train_model(sequence_path=None, checkpoint_dir=None, logs_dir=None, dataset_name=None):
+    """Main training function.
+
+    Args:
+        sequence_path: Path to sequences directory (overrides config.SEQUENCE_PATH)
+        checkpoint_dir: Path for saving checkpoints (overrides config.CHECKPOINT_DIR)
+        logs_dir: Path for TensorBoard logs (overrides config.LOGS_DIR)
+        dataset_name: Human-readable name shown in logs
+    """
+    from config import SEQUENCE_PATH as _DEFAULT_SEQ_PATH
+    from config import CHECKPOINT_DIR as _DEFAULT_CHK_DIR
+    from config import LOGS_DIR as _DEFAULT_LOGS_DIR
+
+    _seq_path  = Path(sequence_path)  if sequence_path  else _DEFAULT_SEQ_PATH
+    _chk_dir   = Path(checkpoint_dir) if checkpoint_dir else _DEFAULT_CHK_DIR
+    _logs_dir  = Path(logs_dir)       if logs_dir       else _DEFAULT_LOGS_DIR
+
     # Configure GPU first
     configure_gpu()
-    
+
+    label = dataset_name or _seq_path.name
     print("="*70)
-    print("SIGN LANGUAGE RECOGNITION - TRAINING")
+    print(f"SIGN LANGUAGE RECOGNITION - TRAINING [{label}]")
     print("="*70)
-    
+    print(f"  Sequences : {_seq_path}")
+    print(f"  Checkpts  : {_chk_dir}")
+
     # 1. Load data
     print("\n[1/5] Loading data...")
-    X, y, action_names, is_original = load_sequences(target_length=SEQUENCE_LENGTH)
+    X, y, action_names, is_original = load_sequences(
+        sequence_path=_seq_path, target_length=SEQUENCE_LENGTH
+    )
     num_classes = len(action_names)
     
     # 2. Split data (pass is_original to prevent augmented data leaking into val/test)
@@ -132,12 +151,12 @@ def train_model():
     
     # 5. Setup callbacks
     print("\n[5/5] Setting up training...")
-    CHECKPOINT_DIR.mkdir(exist_ok=True, parents=True)
-    LOGS_DIR.mkdir(exist_ok=True, parents=True)
-    
+    _chk_dir.mkdir(exist_ok=True, parents=True)
+    _logs_dir.mkdir(exist_ok=True, parents=True)
+
     callbacks = [
         ModelCheckpoint(
-            filepath=str(CHECKPOINT_DIR / 'best_model'),
+            filepath=str(_chk_dir / 'best_model'),
             monitor='val_accuracy',
             save_best_only=True,
             save_format='tf',
@@ -156,7 +175,7 @@ def train_model():
             verbose=1
         ),
         TensorBoard(
-            log_dir=str(LOGS_DIR / 'fit'),
+            log_dir=str(_logs_dir / 'fit'),
             histogram_freq=1
         )
     ]
@@ -210,16 +229,16 @@ def train_model():
     print(f"\nTest Accuracy: {test_acc*100:.2f}%")
     
     # 8. Save final model
-    model.save(str(CHECKPOINT_DIR / 'final_model'), save_format='tf')
-    
+    model.save(str(_chk_dir / 'final_model'), save_format='tf')
+
     # 9. Save action mapping
     mapping = {i: name for i, name in enumerate(action_names)}
-    with open(CHECKPOINT_DIR / 'action_mapping.json', 'w') as f:
+    with open(_chk_dir / 'action_mapping.json', 'w') as f:
         json.dump(mapping, f, indent=2)
-    
+
     print(f"\nTraining complete")
-    print(f"   Best model: {CHECKPOINT_DIR / 'best_model'}")
-    print(f"   TensorBoard: tensorboard --logdir={LOGS_DIR}")
+    print(f"   Best model: {_chk_dir / 'best_model'}")
+    print(f"   TensorBoard: tensorboard --logdir={_logs_dir}")
     
     return history, test_acc
 
