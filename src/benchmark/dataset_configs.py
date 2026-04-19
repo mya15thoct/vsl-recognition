@@ -1,6 +1,6 @@
 from pathlib import Path
 
-BASE_DIR = Path("/mnt/ngan/benchmark")
+BASE_DIR = Path("/home/islabworker2/mya/vsl-recognition/benchmark")
 
 DATASETS = {
     "include": {
