@@ -96,33 +96,56 @@ def _has_videos(folder, exts):
 
 def find_video_root(raw_dir, extensions, max_depth=4):
     """
-    Walk the download directory to find the folder whose direct
-    subdirectories contain video files (i.e., the class-level root).
-    Returns the best candidate or None.
+    Collect ALL class-level folders (folders whose direct children are videos)
+    across the entire raw_dir tree, then symlink them into a single flat
+    directory raw_dir/_flat/ so extraction sees one unified root.
+
+    This handles datasets like INCLUDE that split classes across multiple
+    category subdirectories (Clothes/, Society/, etc.).
     """
     raw_dir = Path(raw_dir)
-    best_dir, best_count = None, 0
+    flat_dir = raw_dir / "_flat"
+
+    # Gather every folder that directly contains video files
+    class_dirs = []
 
     def _walk(d, depth):
-        nonlocal best_dir, best_count
         if depth > max_depth or not d.is_dir():
             return
-        count = sum(1 for sub in d.iterdir() if sub.is_dir() and _has_videos(sub, extensions))
-        if count > best_count:
-            best_count, best_dir = count, d
+        if _has_videos(d, extensions):
+            class_dirs.append(d)
+            return  # don't recurse into a class folder
         for sub in d.iterdir():
-            if sub.is_dir():
+            if sub.is_dir() and sub.name != "_flat":
                 _walk(sub, depth + 1)
 
     _walk(raw_dir, 0)
 
-    if best_dir is None or best_count == 0:
+    if not class_dirs:
         print(f"[WARNING] No class/video structure found under {raw_dir}")
         print("  Run with --explore to inspect the downloaded folder.")
         return None
 
-    print(f"[AUTO-DETECT] Video root: {best_dir}  ({best_count} class folders)")
-    return best_dir
+    # If only one parent contains all classes, return it directly
+    parents = {d.parent for d in class_dirs}
+    if len(parents) == 1:
+        root = next(iter(parents))
+        print(f"[AUTO-DETECT] Video root: {root}  ({len(class_dirs)} class folders)")
+        return root
+
+    # Multiple parents → create flat symlink directory
+    print(f"[FLATTEN] {len(class_dirs)} class folders across {len(parents)} categories")
+    print(f"  → merging into {flat_dir}")
+    flat_dir.mkdir(exist_ok=True)
+    for class_dir in class_dirs:
+        # Strip leading "123. " prefix if present (e.g. "37. Hat" → "Hat")
+        import re
+        clean_name = re.sub(r'^\d+\.\s*', '', class_dir.name).strip()
+        link = flat_dir / clean_name
+        if not link.exists():
+            link.symlink_to(class_dir.resolve())
+    print(f"[OK] Flat view ready: {len(list(flat_dir.iterdir()))} classes")
+    return flat_dir
 
 
 def explore_structure(raw_dir, extensions, limit=30):
