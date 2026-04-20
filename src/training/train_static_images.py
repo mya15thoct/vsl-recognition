@@ -272,8 +272,9 @@ def train_combined(
     if len(X_img_real) > 1:
         X_img_tr, X_img_val, y_img_tr, y_img_val = train_test_split(
             X_img_real, y_img_real,
-            test_size=val_split, stratify=y_img_real,
+            test_size=val_split,
             random_state=42
+            # no stratify — too many classes vs too few image samples
         )
     else:
         X_img_tr, y_img_tr = X_img_real, y_img_real
