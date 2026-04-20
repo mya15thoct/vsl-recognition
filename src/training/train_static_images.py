@@ -104,14 +104,18 @@ def load_video_sequences(seq_path, action_mapping_path, sequence_length):
 # LOAD IMAGE SEQUENCES
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_image_sequences(seq_path, sequence_length, n_augment=10):
-    """Load static image sequences (*_static.npy) with augmentation.
+def load_image_sequences(seq_path, sequence_length, target_per_class=30):
+    """
+    Load static image sequences with DYNAMIC augmentation.
+
+    Each ISL class is augmented until it reaches target_per_class samples.
+    Classes with more real images need fewer augmentations.
 
     Args:
-        n_augment: Number of augmented copies per image (default 10).
-                   Set to 0 to disable augmentation.
+        target_per_class: Target number of samples per ISL class.
+                          Set to 0 to disable augmentation.
     """
-    print(f"\n[IMAGE] Loading from {seq_path} (augment x{n_augment})...")
+    print(f"\n[IMAGE] Loading (target {target_per_class} samples/class)...")
     folders = sorted([d for d in Path(seq_path).iterdir() if d.is_dir()])
 
     image_classes = []
@@ -122,21 +126,34 @@ def load_image_sequences(seq_path, sequence_length, n_augment=10):
         if not static_files:
             continue
         image_classes.append(folder.name)
+
+        # Load all real images for this class
+        real_seqs = []
         for npy in static_files:
             seq = np.load(npy).astype(np.float32)
             padded = np.zeros((sequence_length, 1662), dtype=np.float32)
             padded[:min(len(seq), sequence_length)] = seq[:min(len(seq), sequence_length)]
-
-            # Original
+            real_seqs.append(padded)
             raw.append((folder.name, padded))
 
-            # Augmented copies
-            if n_augment > 0:
-                for aug in augment_static_sequence(padded, n=n_augment):
+        # Dynamic augmentation: fill up to target_per_class
+        if target_per_class > 0:
+            n_real    = len(real_seqs)
+            n_needed  = max(0, target_per_class - n_real)
+            if n_needed > 0:
+                # Cycle through real images and augment
+                for i in range(n_needed):
+                    base = real_seqs[i % n_real]
+                    aug  = augment_static_sequence(base, n=1)[0]
                     raw.append((folder.name, aug))
 
+    # Count per class for reporting
+    from collections import Counter
+    counts = Counter(name for name, _ in raw)
+    avg    = np.mean(list(counts.values())) if counts else 0
+
     print(f"  Image classes: {len(image_classes)}")
-    print(f"  Image samples: {len(raw)}  (incl. augmentation x{n_augment})")
+    print(f"  Image samples: {len(raw)}  (avg {avg:.1f}/class, target={target_per_class})")
     return raw, image_classes
 
 
@@ -236,7 +253,14 @@ def train_combined(
 
     # ── Load data ─────────────────────────────────────────────────────────────
     X_vid, y_vid, video_names = load_video_sequences(seq_path, action_mapping_path, seq_len)
-    raw_images, image_names   = load_image_sequences(seq_path, seq_len)
+
+    # Auto-compute target = avg video samples per class
+    samples_per_class = len(X_vid) / max(len(video_names), 1)
+    target_per_class  = int(samples_per_class)
+    print(f"  Auto target per class: {target_per_class} (avg video samples/class)")
+
+    raw_images, image_names = load_image_sequences(seq_path, seq_len,
+                                                    target_per_class=target_per_class)
 
     # ── Merge vocabularies ────────────────────────────────────────────────────
     all_names, name_to_idx, new_classes = merge_vocabularies(video_names, image_names)
