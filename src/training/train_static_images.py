@@ -30,6 +30,45 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 from config import SEQUENCE_PATH, CHECKPOINT_DIR, SEQUENCE_LENGTH
+from utils.augmentation import add_noise, spatial_jitter
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STATIC IMAGE AUGMENTATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def augment_static_sequence(seq: np.ndarray, n: int = 10) -> list:
+    """
+    Generate n augmented copies of a static image sequence.
+    Only augments the real frame (index 0); zero-padded frames are untouched.
+
+    Augmentations applied:
+      - Gaussian noise  (std=0.01)
+      - Spatial jitter  (std=0.015)
+      - Combined noise + jitter
+
+    Args:
+        seq: (T, 1662) padded static sequence (1 real frame + zeros)
+        n:   number of augmented copies to generate
+
+    Returns:
+        List of n augmented sequences, each (T, 1662)
+    """
+    augmented = []
+    methods = ['noise', 'jitter', 'both']
+
+    for i in range(n):
+        method = methods[i % len(methods)]
+        aug = seq.copy()
+
+        if method == 'noise' or method == 'both':
+            aug = add_noise(aug, noise_std=0.008)
+        if method == 'jitter' or method == 'both':
+            aug = spatial_jitter(aug, jitter_std=0.015)
+
+        augmented.append(aug)
+
+    return augmented
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -65,9 +104,14 @@ def load_video_sequences(seq_path, action_mapping_path, sequence_length):
 # LOAD IMAGE SEQUENCES
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_image_sequences(seq_path, sequence_length):
-    """Load static image sequences (*_static.npy) — all classes found in folder."""
-    print(f"\n[IMAGE] Loading from {seq_path}...")
+def load_image_sequences(seq_path, sequence_length, n_augment=10):
+    """Load static image sequences (*_static.npy) with augmentation.
+
+    Args:
+        n_augment: Number of augmented copies per image (default 10).
+                   Set to 0 to disable augmentation.
+    """
+    print(f"\n[IMAGE] Loading from {seq_path} (augment x{n_augment})...")
     folders = sorted([d for d in Path(seq_path).iterdir() if d.is_dir()])
 
     image_classes = []
@@ -82,10 +126,17 @@ def load_image_sequences(seq_path, sequence_length):
             seq = np.load(npy).astype(np.float32)
             padded = np.zeros((sequence_length, 1662), dtype=np.float32)
             padded[:min(len(seq), sequence_length)] = seq[:min(len(seq), sequence_length)]
+
+            # Original
             raw.append((folder.name, padded))
 
+            # Augmented copies
+            if n_augment > 0:
+                for aug in augment_static_sequence(padded, n=n_augment):
+                    raw.append((folder.name, aug))
+
     print(f"  Image classes: {len(image_classes)}")
-    print(f"  Image samples: {len(raw)}")
+    print(f"  Image samples: {len(raw)}  (incl. augmentation x{n_augment})")
     return raw, image_classes
 
 
