@@ -254,41 +254,83 @@ def train_combined(
     # ── Load data ─────────────────────────────────────────────────────────────
     X_vid, y_vid, video_names = load_video_sequences(seq_path, action_mapping_path, seq_len)
 
-    # Auto-compute target = avg video samples per class
-    samples_per_class = len(X_vid) / max(len(video_names), 1)
-    target_per_class  = int(samples_per_class)
-    print(f"  Auto target per class: {target_per_class} (avg video samples/class)")
-
-    raw_images, image_names = load_image_sequences(seq_path, seq_len,
-                                                    target_per_class=target_per_class)
+    # Load RAW images (no augmentation yet) — needed for clean split
+    raw_images_real, image_names = load_image_sequences(seq_path, seq_len,
+                                                         target_per_class=0)  # no aug
 
     # ── Merge vocabularies ────────────────────────────────────────────────────
     all_names, name_to_idx, new_classes = merge_vocabularies(video_names, image_names)
     new_num_classes = len(all_names)
 
-    # Re-index video labels (same as before, no change needed)
-    # Re-index image labels with new combined index
-    X_img = np.array([x for _, x in raw_images], dtype=np.float32)
-    y_img = np.array([name_to_idx[name] for name, _ in raw_images], dtype=np.int32)
+    # Index image labels
+    X_img_real = np.array([x for _, x in raw_images_real], dtype=np.float32)
+    y_img_real = np.array([name_to_idx[name] for name, _ in raw_images_real], dtype=np.int32)
 
-    # ── Combine ───────────────────────────────────────────────────────────────
-    X_all = np.concatenate([X_vid, X_img], axis=0)
-    y_all = np.concatenate([y_vid, y_img], axis=0)
+    # ── Split image data BEFORE augmentation (avoid leakage) ─────────────────
+    from sklearn.model_selection import train_test_split
 
-    # Shuffle
-    idx   = np.random.permutation(len(X_all))
-    X_all, y_all = X_all[idx], y_all[idx]
+    if len(X_img_real) > 1:
+        X_img_tr, X_img_val, y_img_tr, y_img_val = train_test_split(
+            X_img_real, y_img_real,
+            test_size=val_split, stratify=y_img_real,
+            random_state=42
+        )
+    else:
+        X_img_tr, y_img_tr = X_img_real, y_img_real
+        X_img_val, y_img_val = X_img_real, y_img_real
 
-    y_cat = tf.keras.utils.to_categorical(y_all, new_num_classes)
+    # ── Augment ONLY training image split ────────────────────────────────────
+    samples_per_class = len(X_vid) / max(len(video_names), 1)
+    target_per_class  = int(samples_per_class)
+    print(f"\n  Auto target per class: {target_per_class} (avg video samples/class)")
 
-    print(f"\n[DATA] Total samples: {len(X_all)}")
-    print(f"       Video: {len(X_vid)}  |  Image: {len(X_img)}")
+    # Augment training images to reach target
+    X_img_tr_aug, y_img_tr_aug = list(X_img_tr), list(y_img_tr)
+    from collections import Counter
+    counts = Counter(y_img_tr.tolist())
+    for label_idx in np.unique(y_img_tr):
+        n_real   = counts[label_idx]
+        n_needed = max(0, target_per_class - n_real)
+        idxs     = np.where(y_img_tr == label_idx)[0]
+        for i in range(n_needed):
+            base = X_img_tr[idxs[i % len(idxs)]]
+            aug  = augment_static_sequence(base, n=1)[0]
+            X_img_tr_aug.append(aug)
+            y_img_tr_aug.append(label_idx)
+
+    X_img_tr_aug = np.array(X_img_tr_aug, dtype=np.float32)
+    y_img_tr_aug = np.array(y_img_tr_aug, dtype=np.int32)
+
+    print(f"  Image train (after aug): {len(X_img_tr_aug)}")
+    print(f"  Image val   (real only): {len(X_img_val)}")
+
+    # ── Combine train + val separately ────────────────────────────────────────
+    # Video split
+    X_v_tr, X_v_val, y_v_tr, y_v_val = train_test_split(
+        X_vid, y_vid, test_size=val_split, stratify=y_vid, random_state=42
+    )
+
+    X_train = np.concatenate([X_v_tr,  X_img_tr_aug], axis=0)
+    y_train = np.concatenate([y_v_tr,  y_img_tr_aug], axis=0)
+    X_val   = np.concatenate([X_v_val, X_img_val],    axis=0)
+    y_val   = np.concatenate([y_v_val, y_img_val],    axis=0)
+
+    # Shuffle train
+    idx_tr  = np.random.permutation(len(X_train))
+    X_train, y_train = X_train[idx_tr], y_train[idx_tr]
+
+    y_train_cat = tf.keras.utils.to_categorical(y_train, new_num_classes)
+    y_val_cat   = tf.keras.utils.to_categorical(y_val,   new_num_classes)
+
+    print(f"\n[DATA] Train: {len(X_train)}  Val: {len(X_val)}")
+    print(f"       Video: {len(X_vid)}  |  Image real: {len(X_img_real)}")
+
 
     # ── Build expanded model ──────────────────────────────────────────────────
     model = build_expanded_model(old_model, new_num_classes)
 
-    # Class weights to handle imbalance (video >> image)
-    cw_array = compute_class_weight('balanced', classes=np.unique(y_all), y=y_all)
+    # Class weights computed from training set only
+    cw_array = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
     cw_dict  = dict(enumerate(cw_array))
 
     model.compile(
@@ -313,15 +355,16 @@ def train_combined(
     print(f"\n{'=' * 60}")
     print("TRAINING on combined vocabulary")
     print(f"  Classes:    {new_num_classes}  ({len(video_names)} video + {len(new_classes)} new)")
-    print(f"  Samples:    {len(X_all)}")
+    print(f"  Train:      {len(X_train)}  (video + augmented images)")
+    print(f"  Val:        {len(X_val)}    (real only — no augmentation)")
     print(f"  lr:         {lr}")
     print(f"{'=' * 60}\n")
 
     model.fit(
-        X_all, y_cat,
+        X_train, y_train_cat,
+        validation_data=(X_val, y_val_cat),
         epochs=epochs,
         batch_size=batch_size,
-        validation_split=val_split,
         callbacks=callbacks,
         class_weight=cw_dict,
         verbose=1,
