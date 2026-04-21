@@ -16,20 +16,24 @@ def augment_dataset(
     target_samples_per_class: int = 15,
     augmentation_methods: list = None,
     output_suffix: str = '_aug',
-    dry_run: bool = False
+    dry_run: bool = False,
+    sequence_path=None,
 ):
     """
     Augment dataset to balance classes
-    
+
     Args:
         target_samples_per_class: Target number of samples per class
         augmentation_methods: List of augmentation methods to use
         output_suffix: Suffix for augmented files (e.g., '_aug1', '_aug2')
         dry_run: If True, only print what would be done without creating files
+        sequence_path: Path to sequences directory (overrides config.SEQUENCE_PATH)
     """
     if augmentation_methods is None:
         augmentation_methods = ['noise', 'subsample', 'scale']
-    
+
+    seq_path = Path(sequence_path) if sequence_path else SEQUENCE_PATH
+
     print("=" * 70)
     print("DATA AUGMENTATION - BALANCING CLASSES")
     print("=" * 70)
@@ -38,9 +42,9 @@ def augment_dataset(
     print(f"Output suffix: {output_suffix}")
     print(f"Dry run: {dry_run}")
     print("=" * 70 + "\n")
-    
+
     # Get all class folders
-    class_folders = sorted([d for d in SEQUENCE_PATH.iterdir() if d.is_dir()])
+    class_folders = sorted([d for d in seq_path.iterdir() if d.is_dir()])
     
     total_original = 0
     total_augmented = 0

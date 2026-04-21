@@ -227,6 +227,17 @@ def extract_keypoints(video_root, seq_dir, extensions):
 
 
 # ---------------------------------------------------------------------------
+# Augmentation
+# ---------------------------------------------------------------------------
+
+def augment_sequences(seq_dir):
+    from data.augment import augment_dataset
+
+    print(f"\n[AUGMENT] Balancing classes in {seq_dir}")
+    augment_dataset(sequence_path=seq_dir)
+
+
+# ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
 
@@ -304,7 +315,10 @@ def main():
         if not args.skip_extract:
             extract_keypoints(video_root, cfg["seq_dir"], cfg["video_extensions"])
 
-        # 4. Train + evaluate
+        # 4. Augment sequences (balance classes)
+        augment_sequences(cfg["seq_dir"])
+
+        # 5. Train + evaluate
         test_acc = train_and_evaluate(cfg)
         if test_acc is None:
             continue
