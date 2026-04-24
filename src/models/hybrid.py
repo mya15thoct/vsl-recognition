@@ -95,7 +95,7 @@ def create_hybrid_multistream_model(num_classes, sequence_length):
     outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
 
     model = Model(inputs=inputs, outputs=outputs,
-                  name='MLP_BiLSTM_CrossPartGating_Attention_Model')
+                  name='MLP_BiLSTM_MultiStream_TemporalAttention_Model')
     return model
 
 
