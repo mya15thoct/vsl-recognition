@@ -13,9 +13,7 @@ Usage:
     python test_realtime_video.py --top_k 5
     python test_realtime_video.py --model_path /path/to/best_model
 
-Controls khi xem video:
-    SPACE / bất kỳ phím   → video tiếp theo
-    Q / ESC               → thoát
+
 """
 import sys
 import argparse
@@ -312,6 +310,10 @@ def run(model, class_names, holistic, top_k, show):
             print("   [ERROR] Không đọc được video\n")
             continue
 
+        target_len = model.input_shape[1]
+        truncated  = len(sequence) > target_len
+        print(f"   Frames    : {len(sequence)} {'→ TRUNCATED to ' + str(target_len) + ' ⚠️' if truncated else '(OK, target=' + str(target_len) + ')'}")
+
         preds = predict(model, sequence, class_names, top_k=top_k)
         pred1 = preds[0]
 
@@ -369,12 +371,15 @@ def run(model, class_names, holistic, top_k, show):
     y_true = [r['true_label'] for r in labeled_results]
     y_pred = [r['predicted']  for r in labeled_results]
     n      = len(labeled_results)
-    n_cls  = len(set(y_true))
+    labels = sorted(set(y_true))   # only classes that actually appear in test set
+    n_cls  = len(labels)
 
     acc      = accuracy_score(y_true, y_pred)
-    macro_f1 = f1_score(y_true, y_pred, average='macro',     zero_division=0)
-    macro_pr = precision_score(y_true, y_pred, average='macro', zero_division=0)
-    macro_re = recall_score(y_true, y_pred, average='macro',  zero_division=0)
+    # Pass labels= so macro average is over y_true classes only,
+    # not polluted by extra classes the model happened to predict.
+    macro_f1 = f1_score(y_true, y_pred, average='macro',     labels=labels, zero_division=0)
+    macro_pr = precision_score(y_true, y_pred, average='macro', labels=labels, zero_division=0)
+    macro_re = recall_score(y_true, y_pred, average='macro',  labels=labels, zero_division=0)
 
     print("\n" + "=" * 60)
     print("METRICS SUMMARY  (realtime / unseen signer)")
@@ -388,7 +393,7 @@ def run(model, class_names, holistic, top_k, show):
 
     # ── per-class report ──────────────────────────────────────────────────────
     print("\nPer-class report:")
-    print(classification_report(y_true, y_pred, zero_division=0))
+    print(classification_report(y_true, y_pred, labels=labels, zero_division=0))
 
     # ── paper-ready sentence ──────────────────────────────────────────────────
     print("─" * 60)
