@@ -280,7 +280,7 @@ def play_video(video_name, raw_frames, preds, true_label, fps=25):
 # Main test loop
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run(model, class_names, holistic, top_k, show):
+def run(model, class_names, holistic_cfg, top_k, show):
     videos = sorted(
         f for f in REALTIME_DIR.iterdir()
         if f.is_file() and f.suffix.lower() in VIDEO_EXTS
@@ -305,7 +305,12 @@ def run(model, class_names, holistic, top_k, show):
         else:
             print(f"   Ground truth : (không nhận ra tên class từ tên file)")
 
-        sequence, raw_frames = extract_sequence_from_video(video_path, holistic)
+        # Fresh holistic per video — prevents tracking state bleeding between videos
+        holistic = get_holistic_model(**holistic_cfg)
+        try:
+            sequence, raw_frames = extract_sequence_from_video(video_path, holistic)
+        finally:
+            holistic.close()
         if sequence is None:
             print("   [ERROR] Không đọc được video\n")
             continue
@@ -435,8 +440,7 @@ def main():
     model       = load_model(model_path)
     class_names = load_class_names(model_path, seq_dir)
 
-    print("\nInitializing MediaPipe …")
-    holistic = get_holistic_model(
+    holistic_cfg = dict(
         min_detection_confidence=MP_MIN_DETECTION_CONFIDENCE,
         min_tracking_confidence=MP_MIN_TRACKING_CONFIDENCE,
     )
@@ -446,11 +450,8 @@ def main():
     print(f"Top-K        : {args.top_k}")
     print(f"Label source : tên file (VD: XIN_CHAO.mp4 → label XIN_CHAO)")
 
-    try:
-        run(model, class_names, holistic, top_k=args.top_k, show=show)
-    finally:
-        holistic.close()
-        print("Done.")
+    run(model, class_names, holistic_cfg, top_k=args.top_k, show=show)
+    print("Done.")
 
 
 if __name__ == '__main__':
