@@ -105,12 +105,33 @@ def load_model(model_path: Path):
     return model
 
 
-def load_class_names(sequence_path: Path) -> list:
+def load_class_names(model_path: Path, sequence_path: Path) -> list:
+    """
+    Load class names from action_mapping.json saved alongside the model.
+    Falls back to sequences folder if JSON not found.
+    
+    IMPORTANT: Must use the JSON saved AT TRAINING TIME, not the current
+    sequences folder — which may have grown with new classes added later,
+    causing index mismatches.
+    """
+    import json
+    # Try action_mapping.json in same folder as model
+    json_path = model_path.parent / 'action_mapping.json'
+    if json_path.exists():
+        with open(json_path) as f:
+            mapping = json.load(f)   # {"0": "Baby", "1": "Bed", ...}
+        # Sort by integer key to preserve training order
+        classes = [mapping[k] for k in sorted(mapping, key=lambda x: int(x))]
+        print(f"  ✓ {len(classes)} class names from: {json_path}  ← CORRECT (training order)")
+        return classes
+
+    # Fallback: sequences folder (may be outdated if data was added later)
+    print(f"  [WARNING] action_mapping.json not found at: {json_path}")
+    print(f"  [WARNING] Falling back to sequences folder — class order may be WRONG!")
     if sequence_path.exists():
         classes = sorted([d.name for d in sequence_path.iterdir() if d.is_dir()])
         print(f"  ✓ {len(classes)} class names from: {sequence_path}")
         return classes
-    print(f"  [WARNING] sequences folder not found: {sequence_path}")
     return []
 
 
@@ -407,7 +428,7 @@ def main():
         sys.exit(0)
 
     model       = load_model(model_path)
-    class_names = load_class_names(seq_dir)
+    class_names = load_class_names(model_path, seq_dir)
 
     print("\nInitializing MediaPipe …")
     holistic = get_holistic_model(
