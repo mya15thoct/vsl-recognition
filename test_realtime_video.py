@@ -21,12 +21,17 @@ import re
 import cv2
 import numpy as np
 from pathlib import Path
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
     precision_score,
     recall_score,
     classification_report,
+    confusion_matrix,
 )
 
 # ── project root ───────────────────────────────────────────────────────────────
@@ -277,6 +282,60 @@ def play_video(video_name, raw_frames, preds, true_label, fps=25):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Evaluation plots
+# ══════════════════════════════════════════════════════════════════════════════
+
+def save_plots(y_true, y_pred, results, labels):
+    out_dir = REALTIME_DIR / 'eval_plots'
+    out_dir.mkdir(exist_ok=True)
+
+    # ── 1. Confusion matrix ───────────────────────────────────────────────────
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+    fig, ax = plt.subplots(figsize=(max(6, len(labels)), max(5, len(labels))))
+    im = ax.imshow(cm, cmap='Blues')
+    ax.set_xticks(range(len(labels))); ax.set_xticklabels(labels, rotation=45, ha='right', fontsize=9)
+    ax.set_yticks(range(len(labels))); ax.set_yticklabels(labels, fontsize=9)
+    ax.set_xlabel('Predicted'); ax.set_ylabel('Ground Truth')
+    ax.set_title('Confusion Matrix — Realtime (Unseen Signer)')
+    for i in range(len(labels)):
+        for j in range(len(labels)):
+            ax.text(j, i, str(cm[i, j]), ha='center', va='center',
+                    color='white' if cm[i, j] > cm.max() / 2 else 'black', fontsize=10)
+    plt.colorbar(im, ax=ax)
+    plt.tight_layout()
+    cm_path = out_dir / 'confusion_matrix.png'
+    fig.savefig(cm_path, dpi=150)
+    plt.close(fig)
+    print(f"  Saved: {cm_path}")
+
+    # ── 2. Per-class confidence bar chart ─────────────────────────────────────
+    classes   = [r['true_label'] for r in results]
+    confs     = [r['confidence'] * 100 for r in results]
+    correct   = [r['correct'] for r in results]
+    colors    = ['#2ecc71' if c else '#e74c3c' for c in correct]
+
+    fig, ax = plt.subplots(figsize=(max(8, len(classes) * 0.9), 5))
+    bars = ax.bar(classes, confs, color=colors, edgecolor='white', linewidth=0.5)
+    ax.set_ylim(0, 105)
+    ax.set_ylabel('Top-1 Confidence (%)')
+    ax.set_title('Per-class Prediction Confidence — Realtime (Unseen Signer)')
+    ax.axhline(50, color='gray', linewidth=0.8, linestyle='--', label='50% threshold')
+    for bar, r in zip(bars, results):
+        label = '✓' if r['correct'] else f"→{r['predicted']}"
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1.5,
+                label, ha='center', va='bottom', fontsize=8)
+    legend = [mpatches.Patch(color='#2ecc71', label='Correct'),
+              mpatches.Patch(color='#e74c3c', label='Wrong')]
+    ax.legend(handles=legend, loc='upper right')
+    plt.xticks(rotation=30, ha='right', fontsize=9)
+    plt.tight_layout()
+    bar_path = out_dir / 'confidence_per_class.png'
+    fig.savefig(bar_path, dpi=150)
+    plt.close(fig)
+    print(f"  Saved: {bar_path}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Main test loop
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -409,6 +468,8 @@ def run(model, class_names, holistic_cfg, top_k, show):
     print(f'    {macro_pr*100:.1f}% macro precision, and {macro_re*100:.1f}% macro recall."')
     print("─" * 60)
     print()
+
+    save_plots(y_true, y_pred, labeled_results, labels)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
