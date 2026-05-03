@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from config import SEQUENCE_PATH, CHECKPOINT_DIR, SEQUENCE_LENGTH
+from config import SEQUENCE_PATH, CHECKPOINT_DIR, SEQUENCE_LENGTH, ISL_SEQUENCE_PATH
 from utils.augmentation import add_noise, spatial_jitter
 
 
@@ -231,14 +231,16 @@ def train_combined(
     seq_path:            str,
     save_path:           str,
     action_mapping_path: str,
+    image_seq_path:      str   = None,
     sequence_length:     int   = None,
     lr:                  float = 5e-4,
     epochs:              int   = 200,
     batch_size:          int   = 32,
     val_split:           float = 0.1,
 ):
-    seq_path    = seq_path    or str(SEQUENCE_PATH)
-    save_path   = save_path   or str(CHECKPOINT_DIR / 'best_model_combined')
+    seq_path       = seq_path       or str(SEQUENCE_PATH)
+    image_seq_path = image_seq_path or str(ISL_SEQUENCE_PATH)
+    save_path      = save_path      or str(CHECKPOINT_DIR / 'best_model_combined')
     action_mapping_path = action_mapping_path or str(CHECKPOINT_DIR / 'action_mapping.json')
 
     print("=" * 60)
@@ -254,9 +256,9 @@ def train_combined(
     # ── Load data ─────────────────────────────────────────────────────────────
     X_vid, y_vid, video_names = load_video_sequences(seq_path, action_mapping_path, seq_len)
 
-    # Load RAW images (no augmentation yet) — needed for clean split
-    raw_images_real, image_names = load_image_sequences(seq_path, seq_len,
-                                                         target_per_class=0)  # no aug
+    # Load RAW images from ISL-Sequences (no augmentation yet)
+    raw_images_real, image_names = load_image_sequences(image_seq_path, seq_len,
+                                                         target_per_class=0)
 
     # ── Merge vocabularies ────────────────────────────────────────────────────
     all_names, name_to_idx, new_classes = merge_vocabularies(video_names, image_names)
@@ -416,10 +418,12 @@ def train_combined(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path',          type=str,   required=True)
-    parser.add_argument('--seq_path',            type=str,   default=None)
-    parser.add_argument('--save_path',           type=str,   default=None)
-    parser.add_argument('--action_mapping_path', type=str,   default=None)
+    parser.add_argument('--model_path',          type=str, required=True)
+    parser.add_argument('--seq_path',            type=str, default=None)
+    parser.add_argument('--image_seq_path',      type=str, default=None,
+                        help='Path to ISL-Sequences (default: ISL_SEQUENCE_PATH from config)')
+    parser.add_argument('--save_path',           type=str, default=None)
+    parser.add_argument('--action_mapping_path', type=str, default=None)
     parser.add_argument('--lr',                  type=float, default=5e-4)
     parser.add_argument('--epochs',              type=int,   default=200)
     parser.add_argument('--batch_size',          type=int,   default=32)
@@ -428,6 +432,7 @@ if __name__ == '__main__':
     train_combined(
         model_path=args.model_path,
         seq_path=args.seq_path,
+        image_seq_path=args.image_seq_path,
         save_path=args.save_path,
         action_mapping_path=args.action_mapping_path,
         lr=args.lr,

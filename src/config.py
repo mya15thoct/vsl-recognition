@@ -9,10 +9,12 @@ DATA_DIR        = Path("/mnt/ngan/vsl_data")          # Raw videos (read-only)
 IMAGE_DIR       = Path("/mnt/ngan/ISL-Frames-Data")   # Static image frames (1 frame/gloss)
 RECOGNITION_DIR = Path("/mnt/ngan/recognition")        # All outputs go here
 
-SEQUENCE_PATH  = RECOGNITION_DIR / "sequences"   # Extracted .npy sequences
+SEQUENCE_PATH     = RECOGNITION_DIR / "sequences"   # Extracted .npy from VIDEOS
+ISL_SEQUENCE_PATH = Path("/mnt/ngan/ISL-Sequences")  # Extracted .npy from ISL images
 
-# Create sequences directory
+# Create directories
 SEQUENCE_PATH.mkdir(parents=True, exist_ok=True)
+ISL_SEQUENCE_PATH.mkdir(parents=True, exist_ok=True)
 
 # ==================== MEDIAPIPE SETTINGS ====================
 MP_MIN_DETECTION_CONFIDENCE = 0.5
