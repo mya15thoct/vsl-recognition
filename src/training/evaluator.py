@@ -1,156 +1,143 @@
-"""
-Evaluate model and generate metrics
-"""
 import tensorflow as tf
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import classification_report, confusion_matrix
 from pathlib import Path
+import argparse
+import json
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from training.data_loader import load_sequences, split_data
-from config import CHECKPOINT_DIR
+from config import CHECKPOINT_DIR, SEQUENCE_PATH, TRAINING_CONFIG
 
 
-def evaluate_model(model_path=None):
-    """
-    Evaluate model on test set
-    """
-    # Load best model
-    if model_path is None:
-        model_path = CHECKPOINT_DIR / 'best_model'
-    
-    print(f"Loading model: {model_path}")
-    print(f"Model path exists: {Path(model_path).exists()}")
-    
-    try:
-        model = tf.keras.models.load_model(model_path)
-        print(f"✓ Model loaded successfully")
-    except Exception as e:
-        print(f"❌ Error loading model: {e}")
-        print(f"\nTroubleshooting:")
-        print(f"  1. Check if model file exists at: {model_path}")
-        print(f"  2. Verify the model was saved correctly")
-        print(f"  3. Try retraining the model")
-        raise
-    
-    # Get model's expected sequence length from input shape
-    model_input_shape = model.input_shape
-    expected_seq_length = model_input_shape[1]  # (None, seq_length, features)
-    print(f"\nModel input shape: {model_input_shape}")
-    print(f"Expected sequence length: {expected_seq_length} frames")
-    
-    # Load data with target sequence length matching the model
-    print("\nLoading test data...")
-    X, y, action_names, is_original = load_sequences(target_length=expected_seq_length)
-    _, _, X_test, _, _, y_test = split_data(X, y, is_original=is_original)
-    
-    # Verify shapes match
-    print(f"\nShape verification:")
-    print(f"  Model expects: {model_input_shape}")
-    print(f"  Data shape: {X_test.shape}")
-    if X_test.shape[1:] != model_input_shape[1:]:
-        raise ValueError(f"Shape mismatch! Model expects {model_input_shape[1:]}, but data has {X_test.shape[1:]}")
-    
+def load_sequences_with_mapping(sequence_path, action_mapping_path, seq_length):
+    """Load sequences using a fixed action_mapping (not auto-discover)."""
+    with open(action_mapping_path) as f:
+        mapping = json.load(f)                      # {"0": "BRING", ...}
+    action_names = [mapping[str(i)] for i in range(len(mapping))]
+    name_to_idx  = {name: i for i, name in enumerate(action_names)}
+
+    seq_path = Path(sequence_path)
+    X, y, is_original = [], [], []
+
+    for class_name, label_idx in name_to_idx.items():
+        folder = seq_path / class_name
+        if not folder.exists():
+            continue
+        for npy in sorted(folder.glob('*.npy')):
+            seq = np.load(npy).astype(np.float32)
+            padded = np.zeros((seq_length, 1662), dtype=np.float32)
+            padded[:min(len(seq), seq_length)] = seq[:min(len(seq), seq_length)]
+            X.append(padded)
+            y.append(label_idx)
+            is_original.append('_static' not in npy.stem and '_aug' not in npy.stem)
+
+    return (np.array(X, dtype=np.float32),
+            np.array(y, dtype=np.int32),
+            action_names,
+            np.array(is_original, dtype=bool))
+
+
+def evaluate_model(model_path=None, action_mapping_path=None, sequence_path=None):
+    model_path          = model_path or str(CHECKPOINT_DIR / 'best_model')
+    sequence_path       = sequence_path or str(SEQUENCE_PATH)
+    action_mapping_path = action_mapping_path or str(CHECKPOINT_DIR / 'action_mapping.json')
+
+    print(f"Loading model from: {model_path}")
+    model   = tf.keras.models.load_model(model_path)
+    seq_len = model.input_shape[1]
+    n_out   = model.output_shape[-1]
+    print(f"  Input length: {seq_len} frames  |  Output classes: {n_out}")
+
+    # Load data with correct class mapping
+    print(f"\nLoading sequences from: {sequence_path}")
+    print(f"Action mapping:         {action_mapping_path}")
+    X, y, action_names, is_original = load_sequences_with_mapping(
+        sequence_path, action_mapping_path, seq_len
+    )
+
+    # Test split: only original (non-augmented) samples, last 15%
+    orig_idx = np.where(is_original)[0]
+    n_test   = max(1, int(len(orig_idx) * TRAINING_CONFIG['test_split']))
+    test_idx = orig_idx[-n_test:]
+    X_test   = X[test_idx]
+    y_test   = y[test_idx]
+    print(f"  Test set: {len(X_test)} samples  (original only)")
+
     # Predict
     print("\nPredicting...")
-    y_pred = model.predict(X_test, verbose=1)
+    y_pred         = model.predict(X_test, batch_size=64, verbose=1)
     y_pred_classes = np.argmax(y_pred, axis=1)
-    
-    # Get unique classes in test set (some may be missing due to random split)
-    unique_classes_in_test = np.unique(y_test)
-    present_action_names = [action_names[i] for i in unique_classes_in_test]
-    
-    # Check if all classes are present
-    if len(unique_classes_in_test) < len(action_names):
-        missing_classes = set(range(len(action_names))) - set(unique_classes_in_test)
-        print(f"\nWARNING: {len(missing_classes)} class(es) not in test set (due to random split):")
-        for cls_idx in sorted(list(missing_classes))[:5]:
-            print(f"     Class {cls_idx}: {action_names[cls_idx]}")
-        if len(missing_classes) > 5:
-            print(f"     ... and {len(missing_classes) - 5} more")
-    
-    # Metrics
-    print("\n" + "="*70)
-    print("CLASSIFICATION REPORT")
-    print("="*70)
-    report = classification_report(y_test, y_pred_classes,
-                                   labels=unique_classes_in_test,
-                                   target_names=present_action_names,
-                                   output_dict=True,
-                                   zero_division=0)
-    print(classification_report(y_test, y_pred_classes,
-                                labels=unique_classes_in_test,
-                                target_names=present_action_names,
-                                zero_division=0))
 
-    accuracy    = report.get('accuracy', report.get('micro avg', {}).get('f1-score', 0.0))
-    macro_f1    = report['macro avg']['f1-score']
-    macro_pre   = report['macro avg']['precision']
-    macro_rec   = report['macro avg']['recall']
+    # Only report classes that appear in test set
+    unique_classes = np.unique(y_test)
+    class_names    = [action_names[i] for i in unique_classes]
 
-    print("=" * 50)
-    print(f"  Test Accuracy  : {accuracy*100:.2f}%")
-    print(f"  Macro F1       : {macro_f1*100:.2f}%")
-    print(f"  Macro Precision: {macro_pre*100:.2f}%")
-    print(f"  Macro Recall   : {macro_rec*100:.2f}%")
-    print("=" * 50)
+    print("\n========== EVALUATION RESULTS ==========")
+    report = classification_report(
+        y_test, y_pred_classes,
+        labels=unique_classes,
+        target_names=class_names,
+        output_dict=True, zero_division=0
+    )
+    print(classification_report(
+        y_test, y_pred_classes,
+        labels=unique_classes,
+        target_names=class_names,
+        zero_division=0
+    ))
 
-    # Confusion matrix (only for classes in test set)
-    cm = confusion_matrix(y_test, y_pred_classes, labels=unique_classes_in_test)
+    accuracy  = report.get('accuracy', 0.0)
+    macro_f1  = report['macro avg']['f1-score']
+    macro_pre = report['macro avg']['precision']
+    macro_rec = report['macro avg']['recall']
+
+    print(f"Accuracy : {accuracy * 100:.2f}%")
+    print(f"F1 Score : {macro_f1 * 100:.2f}%")
+    print(f"Precision: {macro_pre * 100:.2f}%")
+    print(f"Recall   : {macro_rec * 100:.2f}%")
+    print("=========================================")
+
+    # Confusion matrix
+    cm      = confusion_matrix(y_test, y_pred_classes, labels=unique_classes)
     cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True).clip(min=1)
 
-    # ── 1. Full normalized confusion matrix ───────────────────────────────
-    n = len(present_action_names)
+    n        = len(class_names)
     fig_size = max(24, n * 0.18)
-    fig, ax = plt.subplots(figsize=(fig_size, fig_size))
+    fig, ax  = plt.subplots(figsize=(fig_size, fig_size))
     sns.heatmap(cm_norm, ax=ax, cmap='Blues', vmin=0, vmax=1,
-                xticklabels=present_action_names,
-                yticklabels=present_action_names,
+                xticklabels=class_names, yticklabels=class_names,
                 linewidths=0, annot=False)
-    ax.set_title(f'Normalized Confusion Matrix ({n} classes)', fontsize=14, pad=12)
-    ax.set_ylabel('True Label', fontsize=11)
-    ax.set_xlabel('Predicted Label', fontsize=11)
+    ax.set_title(f'Confusion Matrix ({n} classes)')
+    ax.set_ylabel('True Label')
+    ax.set_xlabel('Predicted Label')
     ax.tick_params(axis='x', labelsize=5, rotation=90)
     ax.tick_params(axis='y', labelsize=5, rotation=0)
     plt.tight_layout()
-    out_full = Path(__file__).parent.parent / 'visualization' / 'confusion_matrix_full.png'
+
+    save_dir = Path(model_path).parent
+    out_full = save_dir / 'confusion_matrix_combined.png'
     plt.savefig(out_full, dpi=200)
     plt.close()
-    print(f"Confusion matrix (full) saved: {out_full}")
-
-    # ── 2. Top confused pairs ─────────────────────────────────────────────
-    TOP_N = 20
-    off_diag = []
-    for i in range(n):
-        for j in range(n):
-            if i != j and cm[i, j] > 0:
-                off_diag.append((cm[i, j], present_action_names[i], present_action_names[j]))
-    off_diag.sort(reverse=True)
-    top = off_diag[:TOP_N]
-
-    if top:
-        labels_top  = [f"{t} → {p}" for _, t, p in top]
-        counts_top  = [c for c, _, _ in top]
-        fig2, ax2 = plt.subplots(figsize=(10, 6))
-        bars = ax2.barh(labels_top[::-1], counts_top[::-1], color='steelblue')
-        ax2.bar_label(bars, padding=3, fontsize=9)
-        ax2.set_xlabel('Misclassification Count')
-        ax2.set_title(f'Top {TOP_N} Confused Class Pairs')
-        ax2.tick_params(axis='y', labelsize=9)
-        plt.tight_layout()
-        out_top = Path(__file__).parent.parent / 'visualization' / 'confusion_matrix_top_confused.png'
-        plt.savefig(out_top, dpi=150)
-        plt.close()
-        print(f"Confusion matrix (top confused) saved: {out_top}")
+    print(f"Confusion matrix saved: {out_full}")
 
     return accuracy, macro_f1, macro_pre, macro_rec, cm
 
 
 if __name__ == "__main__":
-    evaluate_model()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_path',     type=str, default=None)
+    parser.add_argument('--action_mapping', type=str, default=None)
+    parser.add_argument('--sequence_path',  type=str, default=None)
+    args = parser.parse_args()
+
+    evaluate_model(
+        model_path=args.model_path,
+        action_mapping_path=args.action_mapping,
+        sequence_path=args.sequence_path,
+    )

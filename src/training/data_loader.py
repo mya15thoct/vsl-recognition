@@ -141,7 +141,7 @@ def split_data(X, y, train_size=0.7, val_size=0.15, random_state=42, is_original
             samples_in_temp = int(np.floor(class_counts[i] * temp_size))
             if samples_in_temp < 2:
                 problematic.append((unique_classes[i], class_counts[i], samples_in_temp))
-        print(f"\n⚠️  WARNING: {len(problematic)} class(es) will have < 2 samples in val+test set")
+        print(f"\n WARNING: {len(problematic)} class(es) will have < 2 samples in val+test set")
         for cls_idx, total_count, temp_count in problematic[:5]:
             print(f"     Class {cls_idx}: {total_count} total → ~{temp_count} in val+test")
         if len(problematic) > 5:
@@ -157,7 +157,7 @@ def split_data(X, y, train_size=0.7, val_size=0.15, random_state=42, is_original
             X_temp, y_temp, train_size=val_ratio, random_state=random_state, stratify=y_temp
         )
     else:
-        print(f"  ⚠️  Using RANDOM split (stratification not possible)")
+        print(f"  Using RANDOM split (stratification not possible)")
         X_orig_train, X_temp, y_orig_train, y_temp = train_test_split(
             X_orig, y_orig, train_size=train_size, random_state=random_state
         )
