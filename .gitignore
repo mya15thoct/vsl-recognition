@@ -67,3 +67,9 @@ tmp/
 
 # Old ActionDetectionforSignLanguage folder (if still exists)
 ActionDetectionforSignLanguage/
+
+# Kaggle credentials setup (contains API token — DO NOT COMMIT)
+setup_kaggle_credentials.py
+
+# Evaluation results (large files)
+eval_results/
