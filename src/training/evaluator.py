@@ -92,7 +92,7 @@ def evaluate_model(model_path=None, action_mapping_path=None, sequence_path=None
         zero_division=0
     ))
 
-    accuracy  = report.get('accuracy', 0.0)
+    accuracy  = float(np.mean(y_pred_classes == y_test))
     macro_f1  = report['macro avg']['f1-score']
     macro_pre = report['macro avg']['precision']
     macro_rec = report['macro avg']['recall']
