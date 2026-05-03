@@ -201,6 +201,7 @@ def print_summary():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
+    global BASE_DATA_DIR, DATASETS
     parser = argparse.ArgumentParser(
         description="Download Kaggle datasets for ISL benchmark evaluation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -242,7 +243,6 @@ Examples:
     args = parser.parse_args()
 
     # Override base dir if specified
-    global BASE_DATA_DIR, DATASETS
     if args.data_dir:
         BASE_DATA_DIR = Path(args.data_dir)
         for key in DATASETS:
