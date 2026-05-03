@@ -86,14 +86,13 @@ def check_kaggle_credentials():
 
 
 def check_kaggle_installed():
-    """Check if kaggle package is installed."""
-    try:
-        import kaggle  # noqa: F401
+    """Check if kaggle CLI is available."""
+    import shutil
+    if shutil.which("kaggle") is not None:
         return True
-    except ImportError:
-        print("[ERROR] kaggle package not installed.")
-        print("  Run: pip install kaggle")
-        return False
+    print("[ERROR] kaggle CLI not found.")
+    print("  Run: pip install kaggle")
+    return False
 
 
 def download_dataset(name: str, info: dict, skip_existing: bool = False):
@@ -117,18 +116,17 @@ def download_dataset(name: str, info: dict, skip_existing: bool = False):
     staging_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        import kaggle  # noqa: F401
-        from kaggle.api.kaggle_api_extended import KaggleApiExtended
-
-        api = KaggleApiExtended()
-        api.authenticate()
+        import subprocess
 
         print(f"\n[DOWNLOADING] {info['kaggle_id']} ...")
-        api.dataset_download_files(
-            dataset=info["kaggle_id"],
-            path=str(staging_dir),
-            quiet=False,
-            unzip=False,
+        # Use kaggle CLI — works with ALL versions of the kaggle package
+        result = subprocess.run(
+            ["kaggle", "datasets", "download",
+             "-d", info["kaggle_id"],
+             "-p", str(staging_dir),
+             "--quiet"],
+            check=True,
+            capture_output=False,
         )
 
         # Find the downloaded zip
