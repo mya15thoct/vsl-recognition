@@ -262,9 +262,36 @@ def train_combined(
     all_names, name_to_idx, new_classes = merge_vocabularies(video_names, image_names)
     new_num_classes = len(all_names)
 
+    # ── Load video sequences for NEW ISL classes too (if they have real videos) ─
+    # Fixes: classes like Come/Fever/Pour may have video files that were skipped
+    # because they weren't in the original action_mapping.json
+    X_new_vid, y_new_vid = [], []
+    for class_name in new_classes:
+        folder = Path(seq_path) / class_name
+        if not folder.exists():
+            continue
+        label_idx = name_to_idx[class_name]
+        for npy in sorted(folder.glob('*.npy')):
+            if '_static' in npy.stem:
+                continue
+            seq = np.load(npy).astype(np.float32)
+            padded = np.zeros((seq_len, 1662), dtype=np.float32)
+            padded[:min(len(seq), seq_len)] = seq[:min(len(seq), seq_len)]
+            X_new_vid.append(padded)
+            y_new_vid.append(label_idx)
+
+    if X_new_vid:
+        print(f"\n  [NEW CLASS VIDEOS] Found {len(X_new_vid)} video sequences for "
+              f"{len(new_classes)} new ISL classes → added to training")
+        X_vid = np.concatenate([X_vid,
+                                 np.array(X_new_vid, dtype=np.float32)], axis=0)
+        y_vid = np.concatenate([y_vid,
+                                 np.array(y_new_vid, dtype=np.int32)], axis=0)
+
     # Index image labels
     X_img_real = np.array([x for _, x in raw_images_real], dtype=np.float32)
     y_img_real = np.array([name_to_idx[name] for name, _ in raw_images_real], dtype=np.int32)
+
 
     # ── Split image data BEFORE augmentation (avoid leakage) ─────────────────
     from sklearn.model_selection import train_test_split
