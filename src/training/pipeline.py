@@ -14,12 +14,12 @@ print("="*70)
 
 # Disable oneDNN optimizations (prevent crashes/instability)
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-print("✓ Disabled oneDNN optimizations")
+print("[OK] Disabled oneDNN optimizations")
 
 # Set reasonable thread limits
 os.environ['OMP_NUM_THREADS'] = '8'
 os.environ['MKL_NUM_THREADS'] = '8'
-print("✓ Set thread limits")
+print("[OK] Set thread limits")
 
 print("="*70)
 print()
@@ -126,12 +126,12 @@ def setup_gpu():
     return gpus
 
 
-def run_full_pipeline():
+def run_full_pipeline(seed=42):
     """
     Run complete pipeline: train and evaluate
     """
     # Step 0: Set seed for reproducibility
-    set_seed()
+    set_seed(seed)
     
     # Step 0.5: Setup GPU
     setup_gpu()
@@ -158,7 +158,7 @@ def run_full_pipeline():
         print(f" Evaluation failed: {e}")
         import traceback
         traceback.print_exc()
-        eval_acc = 0.0
+        eval_acc, macro_f1, macro_pre, macro_rec = 0.0, 0.0, 0.0, 0.0
         confusion_matrix = None
     
     # Summary
@@ -174,7 +174,7 @@ def run_full_pipeline():
         
     print("="*70)
     
-    return history, eval_acc, confusion_matrix
+    return history, eval_acc, macro_f1, macro_pre, macro_rec, confusion_matrix
 
 
 if __name__ == "__main__":
