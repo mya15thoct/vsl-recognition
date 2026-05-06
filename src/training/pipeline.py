@@ -55,6 +55,7 @@ else:
 print("="*70)
 print()
 
+import json
 from training.trainer import train_model
 from training.evaluator  import evaluate_model
 
@@ -128,31 +129,47 @@ def setup_gpu():
 
 def run_full_pipeline(seed=42):
     """
-    Run complete pipeline: train and evaluate
+    Run complete pipeline: train and evaluate.
+    Model and results are saved to checkpoints/mlp/seed_{seed}/
     """
+    from config import CHECKPOINT_DIR, LOGS_DIR
+
+    # Seed-specific output dirs (avoids overwriting between seeds)
+    seed_chk_dir  = CHECKPOINT_DIR.parent / f'seed_{seed}'
+    seed_logs_dir = LOGS_DIR.parent       / f'seed_{seed}'
+    seed_chk_dir.mkdir(parents=True, exist_ok=True)
+    seed_logs_dir.mkdir(parents=True, exist_ok=True)
+
     # Step 0: Set seed for reproducibility
     set_seed(seed)
-    
+
     # Step 0.5: Setup GPU
     setup_gpu()
-    
+
     print("="*70)
-    print("FULL TRAINING & EVALUATION PIPELINE")
+    print(f"FULL TRAINING & EVALUATION PIPELINE  [seed={seed}]")
+    print(f"  Checkpoints : {seed_chk_dir}")
     print("="*70)
-    
+
     # Step 1: Train model
     print("\n" + "="*70)
     print("STEP 1: TRAINING")
     print("="*70)
-    history, train_test_acc = train_model()
-    
+    history, train_test_acc = train_model(
+        checkpoint_dir=seed_chk_dir,
+        logs_dir=seed_logs_dir,
+    )
+
     # Step 2: Evaluate on test set
     print("\n" + "="*70)
     print("STEP 2: DETAILED EVALUATION")
     print("="*70)
-    
+
     try:
-        eval_acc, macro_f1, macro_pre, macro_rec, confusion_matrix = evaluate_model()
+        eval_acc, macro_f1, macro_pre, macro_rec, confusion_matrix = evaluate_model(
+            model_path=str(seed_chk_dir / 'best_model'),
+            action_mapping_path=str(seed_chk_dir / 'action_mapping.json'),
+        )
         print("Evaluation completed successfully")
     except Exception as e:
         print(f" Evaluation failed: {e}")
@@ -160,20 +177,30 @@ def run_full_pipeline(seed=42):
         traceback.print_exc()
         eval_acc, macro_f1, macro_pre, macro_rec = 0.0, 0.0, 0.0, 0.0
         confusion_matrix = None
-    
+
+    # Save results.json for this seed
+    results = {
+        'seed':       seed,
+        'accuracy':   float(eval_acc),
+        'macro_f1':   float(macro_f1),
+        'precision':  float(macro_pre),
+        'recall':     float(macro_rec),
+    }
+    results_path = seed_chk_dir / 'results.json'
+    with open(results_path, 'w') as f:
+        json.dump(results, f, indent=2)
+    print(f"Results saved: {results_path}")
+
     # Summary
     print("\n" + "="*70)
     print("PIPELINE COMPLETED")
     print("="*70)
-    print(f"Training completed successfully")
     if eval_acc > 0:
-        print(f"Final test accuracy: {eval_acc*100:.2f}%")
-        print(f"Confusion matrix saved to checkpoints/confusion_matrix.png")
+        print(f"Seed {seed} | Acc: {eval_acc*100:.2f}% | F1: {macro_f1*100:.2f}% | Pre: {macro_pre*100:.2f}% | Rec: {macro_rec*100:.2f}%")
     else:
         print("Evaluation step encountered errors (see above).")
-        
     print("="*70)
-    
+
     return history, eval_acc, macro_f1, macro_pre, macro_rec, confusion_matrix
 
 
