@@ -6,15 +6,23 @@ from pathlib import Path
 
 # ==================== PATHS ====================
 DATA_DIR        = Path("/mnt/ngan/vsl_data")          # Raw videos (read-only)
-IMAGE_DIR       = Path("/mnt/ngan/ISL-Frames-Data")   # Static image frames (1 frame/gloss)
-RECOGNITION_DIR = Path("/mnt/ngan/recognition")        # All outputs go here
+IMAGE_DIR       = Path("/mnt/ngan/ISL-Frames-Data")   # Static image frames (read-only)
+RECOGNITION_DIR = Path("/mnt/ngan/recognition")        # Word model base — READ ONLY
 
-SEQUENCE_PATH     = RECOGNITION_DIR / "sequences"        # VSL word video keypoints
-ISL_SEQUENCE_PATH = Path("/mnt/ngan/ISL-Sequences/word")  # ISL image keypoints (per-word)
+# ISL-Sequences: ALL isl-sentence outputs go here
+ISL_SEQ_DIR = Path("/mnt/ngan/ISL-Sequences")
 
-# Create directories
-SEQUENCE_PATH.mkdir(parents=True, exist_ok=True)
+SEQUENCE_PATH     = RECOGNITION_DIR / "sequences"        # VSL word video keypoints (read-only)
+ISL_SEQUENCE_PATH = ISL_SEQ_DIR / "word"                 # ISL image keypoints (per-word)
+
+# Combined model outputs → ISL-Sequences (NOT recognition/)
+ISL_CHECKPOINT_DIR = ISL_SEQ_DIR / "checkpoints"
+ISL_LOGS_DIR       = ISL_SEQ_DIR / "logs"
+
+# Create only ISL-Sequences subdirs
 ISL_SEQUENCE_PATH.mkdir(parents=True, exist_ok=True)
+ISL_CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+ISL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==================== MEDIAPIPE SETTINGS ====================
 MP_MIN_DETECTION_CONFIDENCE = 0.5
@@ -44,11 +52,9 @@ COLORS = {
 # Override via environment variable: MODEL_TYPE=transformer python main.py train
 MODEL_TYPE = os.environ.get('MODEL_TYPE', 'mlp')
 
-# Separate checkpoint/log dirs per model type to avoid overwriting
+# Base word model checkpoint/log dirs (READ ONLY — already trained)
 CHECKPOINT_DIR = RECOGNITION_DIR / 'checkpoints' / MODEL_TYPE
 LOGS_DIR       = RECOGNITION_DIR / 'logs'        / MODEL_TYPE
-CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==================== TRAINING CONFIG ====================
 TRAINING_CONFIG = {

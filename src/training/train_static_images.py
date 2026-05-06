@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
-from config import SEQUENCE_PATH, CHECKPOINT_DIR, SEQUENCE_LENGTH, ISL_SEQUENCE_PATH
+from config import SEQUENCE_PATH, CHECKPOINT_DIR, ISL_SEQUENCE_PATH, ISL_CHECKPOINT_DIR
 from utils.augmentation import add_noise, spatial_jitter
 
 
@@ -165,21 +165,33 @@ def merge_vocabularies(video_names, image_names):
     """
     Merge video and image class lists into one combined vocabulary.
     Video classes keep their existing indices; new image classes are appended.
+    Matching is case-insensitive: 'Actor', 'ACTOR', 'actor' all map to the
+    same class (canonical name taken from the video side).
 
     Returns:
         all_names:    combined list (video_names + new_image_only_names)
-        name_to_idx:  {class_name: new_index}
+        name_to_idx:  {class_name: new_index}  — includes case aliases
         new_classes:  list of image classes not in video vocabulary
     """
-    video_set   = set(video_names)
-    new_classes = [n for n in image_names if n not in video_set]
+    video_lower = {n.lower(): n for n in video_names}   # lower → canonical
+
+    new_classes = [n for n in image_names if n.lower() not in video_lower]
 
     all_names   = video_names + new_classes
     name_to_idx = {name: i for i, name in enumerate(all_names)}
 
-    print(f"\n[VOCAB] Video classes:     {len(video_names)}")
+    # Add aliases so image folder names (different case) resolve to correct index
+    for img_name in image_names:
+        if img_name not in name_to_idx:
+            canonical = video_lower.get(img_name.lower())
+            if canonical:
+                name_to_idx[img_name] = name_to_idx[canonical]
+
+    merged = len(image_names) - len(new_classes)
+    print(f"\n[VOCAB] Video classes:      {len(video_names)}")
     print(f"[VOCAB] Image-only classes: {len(new_classes)}")
-    print(f"[VOCAB] Combined:           {len(all_names)}")
+    print(f"[VOCAB] Merged (same word):  {merged}")
+    print(f"[VOCAB] Combined:            {len(all_names)}")
     if new_classes:
         print(f"        New classes (sample): {new_classes[:5]} ...")
     return all_names, name_to_idx, new_classes
@@ -240,7 +252,7 @@ def train_combined(
 ):
     seq_path       = seq_path       or str(SEQUENCE_PATH)
     image_seq_path = image_seq_path or str(ISL_SEQUENCE_PATH)
-    save_path      = save_path      or str(CHECKPOINT_DIR / 'best_model_combined')
+    save_path      = save_path      or str(ISL_CHECKPOINT_DIR / 'best_model_combined')
     action_mapping_path = action_mapping_path or str(CHECKPOINT_DIR / 'action_mapping.json')
 
     print("=" * 60)
