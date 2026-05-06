@@ -124,9 +124,6 @@ def _make_video_ds(paths, labels, seq_len, num_classes):
 
 def _make_image_ds(X_real, y_real, num_classes, target_per_class, augment):
     """Dataset from real image arrays; augments on-the-fly if augment=True."""
-    from collections import Counter
-    counts = Counter(y_real.tolist())
-
     def gen():
         for label_idx in np.unique(y_real):
             real_seqs = X_real[y_real == label_idx]
@@ -379,10 +376,13 @@ def train_combined(
         img_aug_labels.extend([lbl] * (n_real + n_needed))
     all_train_labels = np.concatenate([labels_tr,
                                        np.array(img_aug_labels, dtype=np.int32)])
-    cw_array = compute_class_weight('balanced',
-                                    classes=np.unique(all_train_labels),
+    present_classes = np.unique(all_train_labels)
+    cw_array = compute_class_weight('balanced', classes=present_classes,
                                     y=all_train_labels)
-    cw_dict = dict(enumerate(cw_array))
+    # Fill ALL new_num_classes keys so Keras weight tensor covers every index
+    cw_dict = {i: 1.0 for i in range(new_num_classes)}
+    for cls, w in zip(present_classes, cw_array):
+        cw_dict[int(cls)] = float(w)
 
     n_train = len(paths_tr) + len(img_aug_labels)
     n_val   = len(paths_val) + len(X_img_val)
