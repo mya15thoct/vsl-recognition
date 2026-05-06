@@ -17,6 +17,7 @@ Usage:
     --action_mapping_path /mnt/ngan/recognition/checkpoints/action_mapping.json
 """
 
+import gc
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, Model
@@ -364,16 +365,32 @@ def train_combined(
     y_train_cat = tf.keras.utils.to_categorical(y_train, new_num_classes)
     y_val_cat   = tf.keras.utils.to_categorical(y_val,   new_num_classes)
 
-    print(f"\n[DATA] Train: {len(X_train)}  Val: {len(X_val)}")
+    n_train, n_val = len(X_train), len(X_val)
+    print(f"\n[DATA] Train: {n_train}  Val: {n_val}")
     print(f"       Video: {len(X_vid)}  |  Image real: {len(X_img_real)}")
 
+    # ── Class weights (compute before freeing y_train) ────────────────────────
+    cw_array = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
+    cw_dict  = dict(enumerate(cw_array))
+
+    # ── Convert to tf.data and free RAM ───────────────────────────────────────
+    train_ds = (tf.data.Dataset.from_tensor_slices((X_train, y_train_cat))
+                .shuffle(buffer_size=n_train)
+                .batch(batch_size)
+                .prefetch(tf.data.AUTOTUNE))
+    val_ds   = (tf.data.Dataset.from_tensor_slices((X_val, y_val_cat))
+                .batch(batch_size)
+                .prefetch(tf.data.AUTOTUNE))
+
+    del X_train, y_train, y_train_cat, X_val, y_val, y_val_cat
+    del X_v_tr, X_v_val, X_img_tr_aug, X_img_val, X_vid, X_img_real
+    gc.collect()
+    print("[RAM] Numpy arrays freed.")
 
     # ── Build expanded model ──────────────────────────────────────────────────
     model = build_expanded_model(old_model, new_num_classes)
-
-    # Class weights computed from training set only
-    cw_array = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
-    cw_dict  = dict(enumerate(cw_array))
+    del old_model
+    gc.collect()
 
     model.compile(
         optimizer=Adam(learning_rate=lr),
@@ -397,16 +414,15 @@ def train_combined(
     print(f"\n{'=' * 60}")
     print("TRAINING on combined vocabulary")
     print(f"  Classes:    {new_num_classes}  ({len(video_names)} video + {len(new_classes)} new)")
-    print(f"  Train:      {len(X_train)}  (video + augmented images)")
-    print(f"  Val:        {len(X_val)}    (real only — no augmentation)")
+    print(f"  Train:      {n_train}  (video + augmented images)")
+    print(f"  Val:        {n_val}    (real only — no augmentation)")
     print(f"  lr:         {lr}")
     print(f"{'=' * 60}\n")
 
     model.fit(
-        X_train, y_train_cat,
-        validation_data=(X_val, y_val_cat),
+        train_ds,
+        validation_data=val_ds,
         epochs=epochs,
-        batch_size=batch_size,
         callbacks=callbacks,
         class_weight=cw_dict,
         verbose=1,
