@@ -73,32 +73,80 @@ def augment_static_sequence(seq: np.ndarray, n: int = 10) -> list:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LOAD VIDEO SEQUENCES
+# COLLECT VIDEO PATHS  (no data loading — avoids RAM spike)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_video_sequences(seq_path, action_mapping_path, sequence_length):
-    """Load original video sequences using existing action_mapping.json."""
-    print(f"\n[VIDEO] Loading from {seq_path}...")
+def collect_video_paths(seq_path, action_mapping_path):
+    """Return file paths + labels without loading .npy data into RAM."""
+    print(f"\n[VIDEO] Scanning {seq_path}...")
     with open(action_mapping_path) as f:
-        mapping = json.load(f)                              # {"0": "BRING", ...}
+        mapping = json.load(f)
     action_names = [mapping[str(i)] for i in range(len(mapping))]
 
-    X, y = [], []
+    paths, labels = [], []
     for label_idx, class_name in enumerate(action_names):
         folder = Path(seq_path) / class_name
         if not folder.exists():
             continue
         for npy in sorted(folder.glob('*.npy')):
             if '_static' in npy.stem:
-                continue                                    # skip images here
-            seq = np.load(npy).astype(np.float32)
-            padded = np.zeros((sequence_length, 1662), dtype=np.float32)
-            padded[:min(len(seq), sequence_length)] = seq[:min(len(seq), sequence_length)]
-            X.append(padded)
-            y.append(label_idx)
+                continue
+            paths.append(str(npy))
+            labels.append(label_idx)
 
-    print(f"  Video samples: {len(X)}  |  Classes: {len(action_names)}")
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32), action_names
+    print(f"  Video samples: {len(paths)}  |  Classes: {len(action_names)}")
+    return paths, np.array(labels, dtype=np.int32), action_names
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GENERATOR-BASED tf.data BUILDERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _make_video_ds(paths, labels, seq_len, num_classes):
+    """Dataset that loads each .npy file on demand — O(1) RAM."""
+    def gen():
+        for path, label in zip(paths, labels):
+            seq    = np.load(path).astype(np.float32)
+            padded = np.zeros((seq_len, 1662), dtype=np.float32)
+            padded[:min(len(seq), seq_len)] = seq[:min(len(seq), seq_len)]
+            oh     = np.zeros(num_classes, dtype=np.float32)
+            oh[label] = 1.0
+            yield padded, oh
+
+    return tf.data.Dataset.from_generator(
+        gen,
+        output_signature=(
+            tf.TensorSpec(shape=(seq_len, 1662), dtype=tf.float32),
+            tf.TensorSpec(shape=(num_classes,),  dtype=tf.float32),
+        )
+    )
+
+
+def _make_image_ds(X_real, y_real, num_classes, target_per_class, augment):
+    """Dataset from real image arrays; augments on-the-fly if augment=True."""
+    from collections import Counter
+    counts = Counter(y_real.tolist())
+
+    def gen():
+        for label_idx in np.unique(y_real):
+            real_seqs = X_real[y_real == label_idx]
+            n_real    = len(real_seqs)
+            n_needed  = max(0, target_per_class - n_real) if augment else 0
+            oh        = np.zeros(num_classes, dtype=np.float32)
+            oh[label_idx] = 1.0
+            for seq in real_seqs:
+                yield seq, oh
+            for i in range(n_needed):
+                yield augment_static_sequence(real_seqs[i % n_real], n=1)[0], oh
+
+    seq_len = X_real.shape[1]
+    return tf.data.Dataset.from_generator(
+        gen,
+        output_signature=(
+            tf.TensorSpec(shape=(seq_len, 1662), dtype=tf.float32),
+            tf.TensorSpec(shape=(num_classes,),  dtype=tf.float32),
+        )
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -266,10 +314,10 @@ def train_combined(
     seq_len     = sequence_length or old_model.input_shape[1]
     print(f"  Sequence length: {seq_len}")
 
-    # ── Load data ─────────────────────────────────────────────────────────────
-    X_vid, y_vid, video_names = load_video_sequences(seq_path, action_mapping_path, seq_len)
+    # ── Collect video paths (no data loading) ────────────────────────────────
+    vid_paths, vid_labels, video_names = collect_video_paths(seq_path, action_mapping_path)
 
-    # Load RAW images from ISL-Sequences (no augmentation yet)
+    # ── Load RAW images into RAM (828 × seq_len × 1662 ≈ 1 GB — fine) ────────
     raw_images_real, image_names = load_image_sequences(image_seq_path, seq_len,
                                                          target_per_class=0)
 
@@ -277,10 +325,8 @@ def train_combined(
     all_names, name_to_idx, new_classes = merge_vocabularies(video_names, image_names)
     new_num_classes = len(all_names)
 
-    # ── Load video sequences for NEW ISL classes too (if they have real videos) ─
-    # Fixes: classes like Come/Fever/Pour may have video files that were skipped
-    # because they weren't in the original action_mapping.json
-    X_new_vid, y_new_vid = [], []
+    # ── Collect extra video paths for new ISL classes ─────────────────────────
+    new_vid_paths, new_vid_labels = [], []
     for class_name in new_classes:
         folder = Path(seq_path) / class_name
         if not folder.exists():
@@ -289,108 +335,84 @@ def train_combined(
         for npy in sorted(folder.glob('*.npy')):
             if '_static' in npy.stem:
                 continue
-            seq = np.load(npy).astype(np.float32)
-            padded = np.zeros((seq_len, 1662), dtype=np.float32)
-            padded[:min(len(seq), seq_len)] = seq[:min(len(seq), seq_len)]
-            X_new_vid.append(padded)
-            y_new_vid.append(label_idx)
+            new_vid_paths.append(str(npy))
+            new_vid_labels.append(label_idx)
 
-    if X_new_vid:
-        print(f"\n  [NEW CLASS VIDEOS] Found {len(X_new_vid)} video sequences for "
+    if new_vid_paths:
+        print(f"\n  [NEW CLASS VIDEOS] {len(new_vid_paths)} sequences for "
               f"{len(new_classes)} new ISL classes → added to training")
-        X_vid = np.concatenate([X_vid,
-                                 np.array(X_new_vid, dtype=np.float32)], axis=0)
-        y_vid = np.concatenate([y_vid,
-                                 np.array(y_new_vid, dtype=np.int32)], axis=0)
+        vid_paths  = vid_paths + new_vid_paths
+        vid_labels = np.concatenate([vid_labels,
+                                     np.array(new_vid_labels, dtype=np.int32)])
 
-    # Index image labels
+    # ── Index image labels ────────────────────────────────────────────────────
     X_img_real = np.array([x for _, x in raw_images_real], dtype=np.float32)
-    y_img_real = np.array([name_to_idx[name] for name, _ in raw_images_real], dtype=np.int32)
-
+    y_img_real = np.array([name_to_idx[name] for name, _ in raw_images_real],
+                          dtype=np.int32)
+    del raw_images_real; gc.collect()
 
     # ── Split image data BEFORE augmentation (avoid leakage) ─────────────────
     from sklearn.model_selection import train_test_split
 
     if len(X_img_real) > 1:
         X_img_tr, X_img_val, y_img_tr, y_img_val = train_test_split(
-            X_img_real, y_img_real,
-            test_size=val_split,
-            random_state=42
-            # no stratify — too many classes vs too few image samples
+            X_img_real, y_img_real, test_size=val_split, random_state=42
         )
     else:
-        X_img_tr, y_img_tr = X_img_real, y_img_real
+        X_img_tr,  y_img_tr  = X_img_real, y_img_real
         X_img_val, y_img_val = X_img_real, y_img_real
+    del X_img_real; gc.collect()
 
-    # ── Augment ONLY training image split ────────────────────────────────────
-    samples_per_class = len(X_vid) / max(len(video_names), 1)
-    target_per_class  = int(samples_per_class)
-    print(f"\n  Auto target per class: {target_per_class} (avg video samples/class)")
-
-    # Augment training images to reach target
-    X_img_tr_aug, y_img_tr_aug = list(X_img_tr), list(y_img_tr)
-    from collections import Counter
-    counts = Counter(y_img_tr.tolist())
-    for label_idx in np.unique(y_img_tr):
-        n_real   = counts[label_idx]
-        n_needed = max(0, target_per_class - n_real)
-        idxs     = np.where(y_img_tr == label_idx)[0]
-        for i in range(n_needed):
-            base = X_img_tr[idxs[i % len(idxs)]]
-            aug  = augment_static_sequence(base, n=1)[0]
-            X_img_tr_aug.append(aug)
-            y_img_tr_aug.append(label_idx)
-
-    X_img_tr_aug = np.array(X_img_tr_aug, dtype=np.float32)
-    y_img_tr_aug = np.array(y_img_tr_aug, dtype=np.int32)
-
-    print(f"  Image train (after aug): {len(X_img_tr_aug)}")
-    print(f"  Image val   (real only): {len(X_img_val)}")
-
-    # ── Combine train + val separately ────────────────────────────────────────
-    # Video split
-    X_v_tr, X_v_val, y_v_tr, y_v_val = train_test_split(
-        X_vid, y_vid, test_size=val_split, stratify=y_vid, random_state=42
+    # ── Split video paths (stratified, no data loading) ───────────────────────
+    paths_tr, paths_val, labels_tr, labels_val = train_test_split(
+        vid_paths, vid_labels, test_size=val_split,
+        stratify=vid_labels, random_state=42
     )
 
-    X_train = np.concatenate([X_v_tr,  X_img_tr_aug], axis=0)
-    y_train = np.concatenate([y_v_tr,  y_img_tr_aug], axis=0)
-    X_val   = np.concatenate([X_v_val, X_img_val],    axis=0)
-    y_val   = np.concatenate([y_v_val, y_img_val],    axis=0)
+    # ── Compute class weights from all training labels ────────────────────────
+    target_per_class = int(len(vid_paths) / max(len(video_names), 1))
+    from collections import Counter
+    img_aug_labels = []
+    for lbl in np.unique(y_img_tr):
+        n_real   = (y_img_tr == lbl).sum()
+        n_needed = max(0, target_per_class - n_real)
+        img_aug_labels.extend([lbl] * (n_real + n_needed))
+    all_train_labels = np.concatenate([labels_tr,
+                                       np.array(img_aug_labels, dtype=np.int32)])
+    cw_array = compute_class_weight('balanced',
+                                    classes=np.unique(all_train_labels),
+                                    y=all_train_labels)
+    cw_dict = dict(enumerate(cw_array))
 
-    # Shuffle train
-    idx_tr  = np.random.permutation(len(X_train))
-    X_train, y_train = X_train[idx_tr], y_train[idx_tr]
-
-    y_train_cat = tf.keras.utils.to_categorical(y_train, new_num_classes)
-    y_val_cat   = tf.keras.utils.to_categorical(y_val,   new_num_classes)
-
-    n_train, n_val = len(X_train), len(X_val)
+    n_train = len(paths_tr) + len(img_aug_labels)
+    n_val   = len(paths_val) + len(X_img_val)
+    print(f"\n  Auto target per class: {target_per_class} (avg video samples/class)")
+    print(f"  Image train (after aug): {len(img_aug_labels)}")
+    print(f"  Image val   (real only): {len(X_img_val)}")
     print(f"\n[DATA] Train: {n_train}  Val: {n_val}")
-    print(f"       Video: {len(X_vid)}  |  Image real: {len(X_img_real)}")
+    print(f"       Video paths: {len(vid_paths)}  |  Image real: {len(X_img_tr) + len(X_img_val)}")
 
-    # ── Class weights (compute before freeing y_train) ────────────────────────
-    cw_array = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
-    cw_dict  = dict(enumerate(cw_array))
-
-    # ── Convert to tf.data and free RAM ───────────────────────────────────────
-    train_ds = (tf.data.Dataset.from_tensor_slices((X_train, y_train_cat))
-                .shuffle(buffer_size=n_train)
-                .batch(batch_size)
-                .prefetch(tf.data.AUTOTUNE))
-    val_ds   = (tf.data.Dataset.from_tensor_slices((X_val, y_val_cat))
-                .batch(batch_size)
-                .prefetch(tf.data.AUTOTUNE))
-
-    del X_train, y_train, y_train_cat, X_val, y_val, y_val_cat
-    del X_v_tr, X_v_val, X_img_tr_aug, X_img_val, X_vid, X_img_real
-    gc.collect()
-    print("[RAM] Numpy arrays freed.")
+    # ── Build tf.data datasets (generators — no full-data RAM spike) ──────────
+    train_ds = (
+        _make_video_ds(paths_tr, labels_tr, seq_len, new_num_classes)
+        .concatenate(_make_image_ds(X_img_tr, y_img_tr, new_num_classes,
+                                    target_per_class, augment=True))
+        .shuffle(buffer_size=2000)
+        .batch(batch_size)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+    val_ds = (
+        _make_video_ds(paths_val, labels_val, seq_len, new_num_classes)
+        .concatenate(_make_image_ds(X_img_val, y_img_val, new_num_classes,
+                                    target_per_class=0, augment=False))
+        .batch(batch_size)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+    print("[RAM] Using generator pipeline — no full-data spike.")
 
     # ── Build expanded model ──────────────────────────────────────────────────
     model = build_expanded_model(old_model, new_num_classes)
-    del old_model
-    gc.collect()
+    del old_model; gc.collect()
 
     model.compile(
         optimizer=Adam(learning_rate=lr),
