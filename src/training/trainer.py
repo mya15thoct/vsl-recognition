@@ -197,13 +197,16 @@ def train_model(sequence_path=None, checkpoint_dir=None, logs_dir=None, dataset_
     from sklearn.utils.class_weight import compute_class_weight
     # Reconstruct y_train labels from dataset for class weight computation
     y_train_labels = np.concatenate([y.numpy().argmax(axis=1) for _, y in train_ds])
+    present_classes = np.unique(y_train_labels)
     class_weights_array = compute_class_weight(
         class_weight='balanced',
-        classes=np.unique(y_train_labels),
+        classes=present_classes,
         y=y_train_labels
     )
     del y_train_labels
-    class_weight_dict = dict(enumerate(class_weights_array))
+    class_weight_dict = {i: 1.0 for i in range(num_classes)}
+    for cls, w in zip(present_classes, class_weights_array):
+        class_weight_dict[int(cls)] = float(w)
     print(f"Class weights computed: min={min(class_weights_array):.3f}, max={max(class_weights_array):.3f}")
 
     print("[DEBUG] About to call model.fit()...")

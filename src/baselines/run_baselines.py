@@ -84,8 +84,11 @@ def load_data():
     val_ds   = create_tf_dataset(X_val,   y_val,   batch_size=TRAINING_CONFIG['batch_size'], shuffle=False)
     test_ds  = create_tf_dataset(X_test,  y_test,  batch_size=TRAINING_CONFIG['batch_size'], shuffle=False)
 
-    cw_array = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
-    class_weight_dict = dict(enumerate(cw_array))
+    present_classes = np.unique(y_train)
+    cw_array = compute_class_weight('balanced', classes=present_classes, y=y_train)
+    class_weight_dict = {i: 1.0 for i in range(num_classes)}
+    for cls, w in zip(present_classes, cw_array):
+        class_weight_dict[int(cls)] = float(w)
     y_test_labels = y_test.copy()
 
     n_train, n_val, n_test = len(X_train), len(X_val), len(X_test)

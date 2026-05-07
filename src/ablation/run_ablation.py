@@ -120,12 +120,16 @@ def load_data():
                                   batch_size=TRAINING_CONFIG['batch_size'], shuffle=False)
 
     # Compute class weights once (from training labels, before freeing numpy)
+    present_classes = np.unique(y_train)
     cw_array = compute_class_weight(
         class_weight='balanced',
-        classes=np.unique(y_train),
+        classes=present_classes,
         y=y_train
     )
-    class_weight_dict = dict(enumerate(cw_array))
+    num_classes = len(action_names)
+    class_weight_dict = {i: 1.0 for i in range(num_classes)}
+    for cls, w in zip(present_classes, cw_array):
+        class_weight_dict[int(cls)] = float(w)
 
     # Keep y_test labels for per-class metrics (from numpy, before freeing)
     y_test_labels = y_test.copy()
