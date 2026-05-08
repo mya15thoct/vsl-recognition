@@ -137,8 +137,11 @@ def run_with_split(config_name: str, cfg: dict, seed: int):
     val_ds   = create_tf_dataset(X_val,   y_val,   batch_size=batch, shuffle=False)
     test_ds  = create_tf_dataset(X_test,  y_test,  batch_size=batch, shuffle=False)
 
-    cw_array = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
-    cw_dict  = dict(enumerate(cw_array))
+    present_classes = np.unique(y_train)
+    cw_array = compute_class_weight('balanced', classes=present_classes, y=y_train)
+    cw_dict = {i: 1.0 for i in range(num_classes)}
+    for cls, w in zip(present_classes, cw_array):
+        cw_dict[int(cls)] = float(w)
     y_test_labels = y_test.copy()
 
     del X_train, X_val, X_test, y_train, y_val, y_test
@@ -254,7 +257,7 @@ def main():
         description='Run model with paper-matching split configurations'
     )
     parser.add_argument(
-        '--seeds', nargs='+', type=int, default=[42, 0, 1],
+        '--seeds', nargs='+', type=int, default=[42],
         help='Seeds to run (default: 42 0 1)'
     )
     parser.add_argument(
