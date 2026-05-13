@@ -13,7 +13,6 @@ Key difference vs hybrid.py:
   Downstream pipeline (BiLSTM, Attention) stays identical for fair comparison.
 """
 import tensorflow as tf
-import numpy as np
 from tensorflow.keras import layers, Model
 
 
@@ -71,6 +70,7 @@ def _create_part_transformer(input_dim, d_model, num_heads, num_blocks, dff,
 
     # Linear projection: raw keypoints → d_model embedding space
     x = layers.Dense(d_model, name=f'{name}_proj')(inputs)          # (B,T,d_model)
+    x = layers.BatchNormalization(name=f'{name}_proj_bn')(x)
     x = layers.LayerNormalization(epsilon=1e-6, name=f'{name}_proj_ln')(x)
 
     # Stack Transformer Encoder blocks
