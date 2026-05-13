@@ -33,7 +33,7 @@ LOG_DIR.mkdir(exist_ok=True)
 RESULTS_DIR = PROJECT_ROOT / 'results' / 'branch_comparison'
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-BRANCHES = ['mlp', 'transformer']
+BRANCHES = ['transformer']
 SEEDS    = [42, 0, 1]
 
 BRANCH_LABELS = {
