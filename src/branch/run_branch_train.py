@@ -2,24 +2,51 @@
 Train one branch variant (mlp or transformer) for one seed.
 Called as subprocess by run_branch_comparison.py.
 
-Reuses trainer.train_model() — same code path as the proposed model.
-
 Usage:
   python src/branch/run_branch_train.py --branch transformer --seed 42
   python src/branch/run_branch_train.py --branch mlp --seed 0
 """
 import sys
 import os
+import gc
 import json
+import random
 import argparse
-import numpy as np
+import time
 from pathlib import Path
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+from sklearn.utils.class_weight import compute_class_weight
+from sklearn.metrics import classification_report
 
 SRC_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(SRC_DIR))
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['OMP_NUM_THREADS']        = '8'
+
+
+def configure_gpu():
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        tf.config.set_visible_devices(gpus[0], 'GPU')
+        print(f"[GPU] {gpus[0].name}")
+    else:
+        print("[GPU] No GPU — using CPU")
+
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    os.environ['PYTHONHASHSEED']     = str(seed)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    print(f"[Seed] {seed}")
 
 
 def main():
@@ -29,13 +56,8 @@ def main():
     parser.add_argument('--force',  action='store_true')
     args = parser.parse_args()
 
-    # Must be set before importing config
-    os.environ['MODEL_TYPE'] = args.branch
-
-    from config import RECOGNITION_DIR
-    from training.pipeline  import set_seed, setup_gpu
-    from training.trainer   import train_model
-    from training.evaluator import evaluate_model
+    from config import RECOGNITION_DIR, SEQUENCE_LENGTH, TRAINING_CONFIG
+    from training.data_loader import load_sequences, split_data, create_tf_dataset
 
     out_dir = RECOGNITION_DIR / 'branch_comparison' / args.branch / f'seed_{args.seed}'
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -45,7 +67,7 @@ def main():
         print(f"[SKIP] Already done: {result_file}")
         return
 
-    setup_gpu()
+    configure_gpu()
     set_seed(args.seed)
 
     print(f"\n{'='*70}")
@@ -54,38 +76,128 @@ def main():
     print(f"  OUT    : {out_dir}")
     print(f"{'='*70}\n")
 
-    # ── Train (reuse existing trainer) ────────────────────────────────────────
-    history, _ = train_model(
-        checkpoint_dir=str(out_dir),
-        logs_dir=str(out_dir / 'logs'),
-        dataset_name=f'{args.branch}_seed{args.seed}',
+    # ── Load data ─────────────────────────────────────────────────────────────
+    print("[1/4] Loading sequences...")
+    X, y, action_names, is_original = load_sequences(target_length=SEQUENCE_LENGTH)
+    num_classes = len(action_names)
+
+    X_train, X_val, X_test, y_train, y_val, y_test = split_data(
+        X, y,
+        train_size=TRAINING_CONFIG['train_split'],
+        val_size=TRAINING_CONFIG['val_split'],
+        is_original=is_original,
     )
+    del X, y, is_original
+    gc.collect()
+
+    sequence_length = X_train.shape[1]
+
+    # ── TF datasets ───────────────────────────────────────────────────────────
+    print("\n[2/4] Creating TF datasets...")
+    batch = TRAINING_CONFIG['batch_size']
+    train_ds = create_tf_dataset(X_train, y_train, batch_size=batch, shuffle=True)
+    val_ds   = create_tf_dataset(X_val,   y_val,   batch_size=batch, shuffle=False)
+    test_ds  = create_tf_dataset(X_test,  y_test,  batch_size=batch, shuffle=False)
+
+    present_classes = np.unique(y_train)
+    cw_array = compute_class_weight('balanced', classes=present_classes, y=y_train)
+    cw_dict  = {i: 1.0 for i in range(num_classes)}
+    for cls, w in zip(present_classes, cw_array):
+        cw_dict[int(cls)] = float(w)
+
+    y_test_labels = y_test.copy()
+    del X_train, X_val, X_test, y_train, y_val, y_test
+    gc.collect()
+
+    # ── Build model ───────────────────────────────────────────────────────────
+    print(f"\n[3/4] Building {args.branch} model...")
+    if args.branch == 'transformer':
+        from models.transformer.model import create_hybrid_transformer_model
+        model = create_hybrid_transformer_model(num_classes=num_classes,
+                                                sequence_length=sequence_length)
+    else:
+        from models.hybrid import create_hybrid_multistream_model
+        model = create_hybrid_multistream_model(num_classes=num_classes,
+                                                sequence_length=sequence_length)
+
+    model.compile(
+        optimizer=Adam(learning_rate=TRAINING_CONFIG['learning_rate']),
+        loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+        metrics=['accuracy'],
+    )
+    model.summary()
+    n_params = model.count_params()
+
+    mapping = {i: name for i, name in enumerate(action_names)}
+    with open(out_dir / 'action_mapping.json', 'w') as f:
+        json.dump(mapping, f, indent=2, ensure_ascii=False)
+
+    # ── Train ─────────────────────────────────────────────────────────────────
+    print(f"\n[4/4] Training...")
+    callbacks = [
+        ModelCheckpoint(str(out_dir / 'best_model'), monitor='val_accuracy',
+                        save_best_only=True, verbose=1),
+        EarlyStopping(monitor='val_accuracy',
+                      patience=TRAINING_CONFIG['early_stopping_patience'],
+                      restore_best_weights=True, verbose=1),
+        ReduceLROnPlateau(monitor='val_loss', factor=0.5,
+                          patience=TRAINING_CONFIG['reduce_lr_patience'], verbose=1),
+    ]
+
+    t0 = time.time()
+    history = model.fit(
+        train_ds, validation_data=val_ds,
+        epochs=TRAINING_CONFIG['epochs'],
+        callbacks=callbacks,
+        class_weight=cw_dict,
+        verbose=1,
+    )
+    train_time_min = round((time.time() - t0) / 60, 2)
 
     history_dict = {k: [float(v) for v in vals] for k, vals in history.history.items()}
     best_epoch   = int(np.argmax(history_dict['val_accuracy'])) + 1
-    n_params     = history.model.count_params()
+
+    with open(out_dir / 'history.json', 'w') as f:
+        json.dump(history_dict, f, indent=2)
 
     # ── Evaluate ──────────────────────────────────────────────────────────────
-    eval_acc, macro_f1, macro_pre, macro_rec, _ = evaluate_model(
-        model_path=str(out_dir / 'best_model'),
-        action_mapping_path=str(out_dir / 'action_mapping.json'),
+    _, test_acc = model.evaluate(test_ds, verbose=0)
+
+    y_pred_chunks = []
+    for x_batch, _ in test_ds:
+        y_pred_chunks.append(model(x_batch, training=False).numpy().argmax(axis=1))
+    y_pred = np.concatenate(y_pred_chunks)
+
+    report    = classification_report(
+        y_test_labels, y_pred,
+        labels=list(range(num_classes)),
+        target_names=action_names,
+        output_dict=True, zero_division=0,
     )
+    macro_f1  = report['macro avg']['f1-score']
+    macro_pre = report['macro avg']['precision']
+    macro_rec = report['macro avg']['recall']
 
     results = {
         'branch':          args.branch,
         'seed':            args.seed,
-        'test_accuracy':   float(eval_acc),
+        'test_accuracy':   float(test_acc),
         'macro_f1':        float(macro_f1),
         'macro_precision': float(macro_pre),
         'macro_recall':    float(macro_rec),
         'best_epoch':      best_epoch,
+        'train_time_min':  train_time_min,
         'n_params':        int(n_params),
     }
     with open(result_file, 'w') as f:
         json.dump(results, f, indent=2)
 
     print(f"\n[SAVED] {result_file}")
-    print(f"  Acc={eval_acc*100:.2f}%  F1={macro_f1*100:.2f}%  Epoch={best_epoch}")
+    print(f"  Acc={test_acc*100:.2f}%  F1={macro_f1*100:.2f}%  Epoch={best_epoch}  Time={train_time_min}m")
+
+    del model, y_pred
+    tf.keras.backend.clear_session()
+    gc.collect()
 
 
 if __name__ == '__main__':
